@@ -5,8 +5,11 @@ interface Props {
 }
 
 export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
+  // Quick tune knobs for line-art style
   const stroke = "#3D3530";
-  const sw = 2.2;
+  const sw = 2;
+  const detailSw = 1.5; // eyes/whiskers细节线宽
+  const noseSw = 1.3;
 
   return (
     <svg
@@ -16,9 +19,9 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
       className={className}
       fill="none"
     >
-      {/* ears — clean triangles */}
+      {/* line-art ears */}
       <path
-        d="M 38 38 L 44 18 L 56 32"
+        d="M 38 38 L 44 16 L 56 33"
         stroke={stroke}
         strokeWidth={sw}
         strokeLinejoin="round"
@@ -26,16 +29,16 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
         fill="none"
       />
       <path
-        d="M 82 38 L 76 18 L 64 32"
+        d="M 82 38 L 76 16 L 64 33"
         stroke={stroke}
         strokeWidth={sw}
         strokeLinejoin="round"
         strokeLinecap="round"
         fill="none"
       />
-      {/* head — soft squircle */}
+      {/* line-art head contour */}
       <path
-        d="M 38 38 Q 30 50 32 70 Q 35 92 60 92 Q 85 92 88 70 Q 90 50 82 38"
+        d="M 38 39 Q 30 52 33 72 Q 36 94 60 94 Q 84 94 87 72 Q 90 52 82 39"
         stroke={stroke}
         strokeWidth={sw}
         strokeLinejoin="round"
@@ -63,14 +66,14 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
       ) : mood === "sleepy" ? (
         <>
           <path
-            d="M 46 62 Q 50 65 54 62"
+            d="M 46 62 Q 50 64.5 54 62"
             stroke={stroke}
             strokeWidth={sw}
             strokeLinecap="round"
             fill="none"
           />
           <path
-            d="M 66 62 Q 70 65 74 62"
+            d="M 66 62 Q 70 64.5 74 62"
             stroke={stroke}
             strokeWidth={sw}
             strokeLinecap="round"
@@ -79,19 +82,33 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
         </>
       ) : (
         <>
-          <circle cx="50" cy="62" r="2" fill={stroke} />
-          <circle cx="70" cy="62" r="2" fill={stroke} />
+          <circle
+            cx="50"
+            cy="62"
+            r="2.1"
+            stroke={stroke}
+            strokeWidth={detailSw}
+            fill="none"
+          />
+          <circle
+            cx="70"
+            cy="62"
+            r="2.1"
+            stroke={stroke}
+            strokeWidth={detailSw}
+            fill="none"
+          />
         </>
       )}
-      {/* nose — tiny triangle */}
+      {/* nose */}
       <path
         d="M 58 70 L 62 70 L 60 73 Z"
-        fill={stroke}
+        fill="none"
         stroke={stroke}
-        strokeWidth="0.8"
+        strokeWidth={noseSw}
         strokeLinejoin="round"
       />
-      {/* mouth — simple */}
+      {/* mouth */}
       {mood === "concerned" ? (
         <path
           d="M 56 80 Q 60 77 64 80"
@@ -109,6 +126,31 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
           fill="none"
         />
       )}
+      {/* whiskers */}
+      <path
+        d="M 44 74 L 34 72"
+        stroke={stroke}
+        strokeWidth={detailSw}
+        strokeLinecap="round"
+      />
+      <path
+        d="M 44 78 L 33 79"
+        stroke={stroke}
+        strokeWidth={detailSw}
+        strokeLinecap="round"
+      />
+      <path
+        d="M 76 74 L 86 72"
+        stroke={stroke}
+        strokeWidth={detailSw}
+        strokeLinecap="round"
+      />
+      <path
+        d="M 76 78 L 87 79"
+        stroke={stroke}
+        strokeWidth={detailSw}
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
