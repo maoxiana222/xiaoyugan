@@ -1,0 +1,1505 @@
+以下是结合 H5 技术栈、Supabase 免费云数据库，并严格按照 v3.1 计算公式整合后的**完整版产品需求文档（可直接交付开发）**。
+
+---
+
+# 产品需求文档 - 小鱼干 精力管理 H5 小程序
+## v3.1 最终版 (H5 + Supabase)
+
+> **阅读提示：** 本文档是交付给开发团队的完整规格说明，包含功能定义、算法实现、数据模型、UI 规范、文案库和测试用例。请**从上到下完整阅读**后再开始编码，不得跳过任何章节。
+
+---
+
+## 一、项目概述与核心意图
+
+### 1.1 产品定义
+
+开发一款精力管理与情绪陪伴 H5 移动应用，产品名称为**小鱼干**。
+
+**核心理念：** 帮助低精力人群（职场女性、宝妈、经期女性、ADHD 患者）通过极简操作记录精力波动，并由 AI 驱动的电子宠物（小猫）提供温暖陪伴、微行动建议和“减法许可”。
+
+**产品定位（开发者必须理解并贯穿全程遵守）：**
+
+| 不是什么 | 是什么 |
+|---------|--------|
+| 效率工具 | 允许摆烂的陪伴工具 |
+| 数据可视化应用 | 自然语言关怀产品 |
+| 强制记录工具 | 最低成本捕捉精力状态的工具 |
+
+**核心价值（任何功能的设计必须围绕以下三条）：**
+1. **零进入成本**：打开即用，无教程、无前置填表
+2. **无惩罚机制**：不显示断更天数，不发催促通知
+3. **温暖陪伴**：电子宠物常驻，低精力时主动关怀
+
+### 1.2 目标用户画像
+
+| 用户类型 | 年龄 | 核心诉求 | 设计关键词 |
+|---------|------|---------|-----------|
+| 职场女性 | 25-40岁 | 快速记录，被理解而非被督促 | 快、轻、不催 |
+| 宝妈 | 25-45岁 | 简单情绪出口 + 允许休息的心理支持 | 简单、包容 |
+| 经期女性 | 全年龄段 | 记录周期性精力变化 + 针对性回血建议 | 周期感知 |
+| ADHD/低精力人群 | 全年龄段 | 极简界面、大按钮、有趣激励而非KPI | 极简、有趣 |
+
+---
+
+## 二、全局约束（开发过程中始终适用）
+
+> ⚠️ 以下规则优先级最高，任何功能实现若与之冲突，必须以本节为准。
+
+1. **精力值范围约束**：精力值为 `[0, 10]` 的浮点数，步进 `0.5`。`currentEnergy` 的计算结果必须通过 `clamp(value, 0, 10)` 约束，绝不允许超出此范围。
+2. **气泡唯一性约束**：任何时刻屏幕上最多同时显示 **1个** 猫咪气泡。新气泡出现前必须关闭现有气泡。使用全局 `activeBubble` 状态锁实现，禁止堆叠。
+3. **触发冲突优先级**：当多个触发条件同时满足时，按 `严重透支预警 > 慢性疲劳期 > 盲盒回血` 的优先级只触发 **最高级别的一个**，其余静默排队，等本次流程结束后才可触发。
+4. **无惩罚机制**：代码中禁止出现断更天数计算、催促文案、任何表示“你XX天没来了”的逻辑。
+5. **单击静默原则**：点击 +/- 按钮的**单击**操作不得触发任何气泡弹窗，仅做动画反馈。
+6. **数据确定性**：AI 生成内容（日报、帮助回答）必须严格基于传入的真实数据，禁止编造未发生的事件。提示词必须在 system prompt 中明确写明此约束，不能只写在 user prompt 里。
+7. **离线优先**：精力记录、当日初始值等核心状态必须先写入本地缓存（`localStorage`），再异步同步云端。网络异常时不影响主流程。
+8. **首次与复访区分**：每次页面 `onShow` 时，必须区分「今日首次打开」和「今日已打开过」两种状态，初始化逻辑不同（见功能 1 详细说明）。
+
+---
+
+## 三、核心功能规格（MVP 共9项）
+
+### 功能 1：初始精力基线测试（四维度建模）
+
+#### 1.1 触发时机与流程控制
+
+```
+触发条件：用户完成注册/登录后，本地存储中不存在 user_baseline 记录
+
+流程图：
+[注册/登录] → 检查 user_baseline 是否存在
+  ├─ 不存在 → [欢迎引导页] → [4页问卷] → [结果页] → [写入 user_baseline] → [进入首页]
+  └─ 存在   → 直接进入首页（跳过整个引导流程）
+
+跳过测试逻辑：
+  用户在欢迎引导页点击【跳过】→ 写入默认 user_baseline（s_initial=10，skip_baseline=true）→ 进入首页
+```
+
+> ⚠️ **防 Bug 要点**：检查 `user_baseline` 是否存在必须**优先读本地缓存**（`localStorage.getItem('user_baseline')`），避免首次云端数据未同步时错误地二次触发问卷。
+
+#### 1.2 欢迎引导页
+
+**视觉：** 圆润可爱手绘风格猫咪形象 + 气泡文案
+
+**文案：**
+```
+“欢迎来到小鱼干！
+
+我是你的陪伴小猫 🐱
+在这里，我们用「小鱼干」来代表你的精力值。
+小鱼干越多，说明你的精力越充沛；
+小鱼干越少，说明你需要休息和照顾。
+
+让我们先来了解一下你的基础能量状态吧~”
+```
+
+**按钮布局：**
+- 主按钮：【开始体检】
+- 副按钮：【跳过，直接进入】（字号小于主按钮，颜色较浅）
+
+**底部进度条：** 4个小鱼干轮廓图标，依次填充，表示第几页（初始全为空心）
+
+---
+
+#### 1.3 四页问卷详细规格
+
+**页面 1：基础体质建模（Base Energy，变量名 `B`）**
+
+```
+文案：“在这个世界上，你觉得自己更接近哪种能量体态？”
+```
+
+| 选项标签 | 描述文案 | 赋值 B |
+|---------|---------|--------|
+| 充电宝 | 续航极强，高压下依然能打 | 10 |
+| 标准电池 | 正常作息下表现稳定，偶尔需要快充 | 7 |
+| 易耗品 | 敏感细腻，能量像蒸气一样容易消散 | 4 |
+
+交互要求：单选，必须选择后【下一步】才可点击；禁止跳过此页。
+
+---
+
+**页面 2：生理节律建模（Hormone Cycle）**
+
+```
+文案：“我们想在你最脆弱的几天，给你自动「请假」。”
+副文案（小字）：“不知道也没关系，可以填大概的。”
+```
+
+**输入控件：**
+- 日期选择器：上一次月经起始日期（最大值为今天，最小值为3年前）
+- 滑块：平均周期天数 `T`，范围 `[21, 35]` 天，默认 `28`
+- 滑块：经期天数 `M`，范围 `[2, 10]` 天，默认 `5`
+
+**约束检查（填写后立即校验）：**
+```javascript
+// M 必须小于 T，否则提示
+if (M >= T) {
+  showInlineError("经期天数不能大于等于周期天数哦");
+  blockNext(); // 禁止下一步
+}
+```
+
+**跳过逻辑：** 若用户点击【跳过此步】，则：
+```javascript
+data.last_period_start = null;
+data.cycle_days = 28;   // 默认值
+data.period_days = 5;   // 默认值
+data.skip_cycle = true; // 标记已跳过，跳过则 P_cycle 固定为 1.0（中性值）
+```
+
+---
+
+**页面 3：生活负荷建模（Daily Load，变量名 `O`）**
+
+```
+文案：“你的日常，是在以下哪种「浓度」中穿行？”
+```
+
+| 选项标签 | 描述文案 | 赋值 O_label | 对应负荷系数 O_weight |
+|---------|---------|-------------|---------------------|
+| 轻盈 | 专注简单，较少被打断或切换身份 | “轻盈” | 1.0 |
+| 切换 | 在职场、家庭、自我间高频跳转 | “切换” | 0.7 |
+| 磨损 | 核心工作是沟通、安抚或处理冲突 | “磨损” | 0.6 |
+
+> ⚠️ **公式设计说明**：`O_weight` 是精力保留率（1.0 = 不额外消耗，0.6 = 额外损耗 40%）。 在计算公式中，我们将其乘以10使其与 B 的量级统一。
+
+---
+
+**页面 4：睡眠基准建模（Sleep Baseline，变量名 `S_base`）**
+
+```
+文案：“睡多久，才能让你感到「活过来了」？”
+副文案（小字）：“这是你的理想睡眠时长，不是实际睡眠时间。”
+```
+
+**输入控件：** 刻度滑块，范围 `4.0h ~ 10.0h`，步进 `0.5h`，默认 `8.0h`
+
+> `S_base` 当前版本暂不参与初始精力计算公式，仅作为未来“昨日睡眠”差值修正的基准存储，开发时预留字段即可。
+
+---
+
+#### 1.4 核心计算公式（v3.1 最终版）
+
+```
+S_initial = round(((B × 0.6) + (O_weight × 0.4 × 10)) × P_cycle, 0.5)
+```
+
+- **B**：基础体质分值（4, 7, 10）
+- **O_weight**：负荷保留率（1.0, 0.7, 0.6），乘以10后与 B 量级对齐
+- **P_cycle**：周期阶段系数（见下表）
+- 结果自动通过 `clamp(value, 0, 10)` 限制范围，且以0.5为步进四舍五入。
+
+**周期阶段系数表：**
+
+| 周期阶段 | 判定条件（D = 当日距上次月经起始的天数 mod T） | 系数 P_cycle |
+|---------|---------------------------------------------|-------------|
+| 月经期 | 0 ≤ D < M | 0.8 |
+| 卵泡期 | M ≤ D < (T/2 - 2) | 1.1 |
+| 排卵期 | (T/2 - 2) ≤ D < (T/2 + 2) | 1.2 |
+| 黄体期 | (T/2 + 2) ≤ D < T | 0.7 |
+| 无数据（已跳过） | skip_cycle = true | 1.0 |
+
+---
+
+#### 1.5 结果页
+
+**视觉核心：** 以小鱼干图标形式直观展示最终数量（如 5.0 条），同时大字显示数字
+
+**文案模板：**
+```
+“建模完成！考虑到你今日处于 [阶段名]，且面临 [负荷类型]，
+你的初始能量为 [S_initial] 条小鱼干。”
+```
+
+**特殊场景附加文案：**
+- 若 `phase === '黄体期'`：追加 “正处于经前敏感期，我们已为你自动开启「减负模式」。”
+- 若 `skip_cycle === true`：追加 “如果以后想追踪生理周期能量，可以在设置里补填哦~”
+
+**操作按钮：** 【开启小鱼干 →】→ 进入首页，**首页立即渲染 S_initial 条小鱼干**（不得有二次加载）
+
+---
+
+#### 1.6 首页初始化逻辑（关键，防止状态丢失）
+
+```javascript
+/**
+ * 首页 onShow 时执行的初始化逻辑
+ * 必须严格区分：今日首次打开 vs 今日已打开过 vs 历史用户重新打开
+ */
+function onHomeShow() {
+  const today = getTodayDateString(); // 格式：'YYYY-MM-DD'
+  const lastOpenDate = localStorage.getItem('last_open_date');
+  const todayInitial = localStorage.getItem(`energy_initial_${today}`);
+
+  if (lastOpenDate === today && todayInitial !== null) {
+    // 情况1：今日已打开过 → 读取当日最新精力值，不重置
+    const currentEnergy = parseFloat(localStorage.getItem(`energy_current_${today}`) ?? todayInitial);
+    renderHome(currentEnergy);
+
+  } else {
+    // 情况2：今日首次打开（新的一天）→ 重新计算今日初始值
+    const baseline = JSON.parse(localStorage.getItem('user_baseline'));
+    if (!baseline) {
+      // 情况3：完全新用户，无基线数据 → 触发引导流程
+      navigateToOnboarding();
+      return;
+    }
+    const { S_initial, phase } = calculateTodayEnergy(baseline);
+    localStorage.setItem(`energy_initial_${today}`, S_initial);
+    localStorage.setItem(`energy_current_${today}`, S_initial);
+    localStorage.setItem('last_open_date', today);
+    renderHome(S_initial, phase);
+  }
+}
+
+/**
+ * 计算今日精力初始值（基于基线数据，重新判定当前周期）
+ * 每天首次打开时调用，以当天日期重新判定周期阶段
+ */
+function calculateTodayEnergy(baseline) {
+  const { base_energy: B, daily_load: O_weight, last_period_start,
+          cycle_days: T, period_days: M, skip_cycle } = baseline;
+
+  let P_cycle = 1.0, phase = '未追踪';
+
+  if (!skip_cycle && last_period_start) {
+    const today = new Date();
+    const lastStart = new Date(last_period_start);
+    // 防止日期异常（lastStart 为未来日期）
+    if (lastStart > today) {
+      console.warn('last_period_start 为未来日期，使用默认 P_cycle=1.0');
+    } else {
+      const daysDiff = Math.floor((today - lastStart) / (1000 * 60 * 60 * 24));
+      const D = daysDiff % T;
+
+      if (D < M) { P_cycle = 0.8; phase = '月经期'; }
+      else if (D < T / 2 - 2) { P_cycle = 1.1; phase = '卵泡期'; }
+      else if (D < T / 2 + 2) { P_cycle = 1.2; phase = '排卵期'; }
+      else { P_cycle = 0.7; phase = '黄体期'; }
+    }
+  }
+
+  // 核心公式：S_initial = round(((B × 0.6) + (O_weight × 0.4 × 10)) × P_cycle, 0.5)
+  const raw = (B * 0.6 + O_weight * 0.4 * 10) * P_cycle;
+  const S_initial = clamp(roundToHalf(raw), 0, 10);
+
+  return { S_initial, phase, P_cycle };
+}
+
+/** 精确到0.5的四舍五入 */
+function roundToHalf(value) {
+  return Math.round(value * 2) / 2;
+}
+
+/** 区间限制 */
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+```
+
+---
+
+#### 1.7 数据存储
+
+**免费云数据库方案：Supabase**
+
+我们选用 **Supabase** 作为后端 BaaS，提供 PostgreSQL 数据库、用户认证、云存储和 Edge Functions。
+
+**表：`user_baseline`**
+```sql
+create table public.user_baseline (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null unique,
+  base_energy int check (base_energy in (4,7,10)),
+  daily_load float check (daily_load in (1.0,0.7,0.6)),
+  last_period_start date,
+  cycle_days int default 28 check (cycle_days between 21 and 35),
+  period_days int default 5 check (period_days between 2 and 10),
+  skip_cycle boolean default false,
+  sleep_baseline float default 8.0 check (sleep_baseline between 4.0 and 10.0),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+```
+
+> 注：`current_cycle_phase`、`p_cycle`、`s_initial` 等**动态字段不存储在云端**，每次打开时实时计算，避免数据过期。
+
+---
+
+### 功能 2：精力值快速记录（核心入口）
+
+#### 2.1 首屏布局
+
+```
+屏幕结构（从上到下）：
+┌─────────────────────────────────┐
+│  顶部栏：[日期]  今天还有 X 条小鱼干 │
+├─────────────────────────────────┤
+│                                 │
+│     [-]   [猫咪+小鱼干圆形布局]  [+]  │
+│                                 │
+├─────────────────────────────────┤
+│  底部导航：首页 / 日报 / 树洞 / 设置  │
+│  右下角：电子宠物（固定悬浮）      │
+└─────────────────────────────────┘
+```
+
+**圆形布局规则：**
+- 猫咪居中，大小随屏幕适配（见 UI 规范）
+- 小鱼干图标环绕，半径随屏幕适配
+- 1-5条：均匀分布在上半圆弧（0°~180°，即猫咪正上方扇形）
+- 6-10条：均匀分布在完整圆周（0°~360°）
+- 0条：所有鱼干位置空白，仅显示轮廓
+- 0.5步进的半条鱼：末尾那条小鱼干图标设置 `opacity: 0.4`（视觉上是半透明）
+
+#### 2.2 +/- 按钮交互（防竞态设计）
+
+```javascript
+/**
+ * 按钮状态机：防止单击与长按逻辑互相污染
+ * 状态：idle → pressing → (longpress_triggered | click_triggered) → idle
+ */
+class EnergyButton {
+  constructor(type) { // type: 'add' | 'subtract'
+    this.type = type;
+    this.pressState = 'idle'; // 'idle' | 'pressing' | 'longpress_fired'
+    this.pressTimer = null;
+    this.LONGPRESS_DELAY = 500; // ms
+  }
+
+  onTouchStart() {
+    if (this.pressState !== 'idle') return; // 防重入
+    this.pressState = 'pressing';
+    this.pressTimer = setTimeout(() => {
+      this.pressState = 'longpress_fired';
+      this.onLongPress();
+    }, this.LONGPRESS_DELAY);
+  }
+
+  onTouchEnd() {
+    clearTimeout(this.pressTimer);
+    if (this.pressState === 'pressing') {
+      // 长按未触发，执行单击
+      this.pressState = 'idle';
+      this.onClick();
+    } else if (this.pressState === 'longpress_fired') {
+      // 长按已触发，touchEnd 不再执行单击
+      this.pressState = 'idle';
+    }
+  }
+
+  onTouchCancel() {
+    // 手指滑出按钮区域，取消所有操作
+    clearTimeout(this.pressTimer);
+    this.pressState = 'idle';
+  }
+
+  onClick() {
+    // 单击：静默调整，无气泡
+    const delta = this.type === 'add' ? 0.5 : -0.5;
+    updateEnergy(delta); // 内部处理边界 clamp
+    playFishAnimation(this.type); // 飞入/淡出动画
+    // ❌ 禁止在此处触发气泡
+  }
+
+  onLongPress() {
+    // 长按：进入二级入口
+    if (this.type === 'add') {
+      navigateTo('/pages/add-detail/index');
+    } else {
+      navigateTo('/pages/subtract-detail/index');
+    }
+  }
+}
+```
+
+#### 2.3 精力值更新函数（带边界和触发判断）
+
+```javascript
+/**
+ * 更新精力值的统一入口
+ * @param {number} delta - 变化量（+0.5 或 -0.5，或二级入口的自定义量）
+ * @param {string} [source] - 来源：'quick'（单击） | 'detail'（二级入口）
+ * @param {object} [record] - 详细记录（二级入口时传入）
+ */
+async function updateEnergy(delta, source = 'quick', record = null) {
+  const today = getTodayDateString();
+  const prev = parseFloat(localStorage.getItem(`energy_current_${today}`) ?? 10);
+  const next = clamp(prev + delta, 0, 10);
+
+  // 1. 更新本地缓存（同步，保证离线可用）
+  localStorage.setItem(`energy_current_${today}`, next);
+
+  // 2. 异步写入云端 Supabase
+  const supabase = getSupabaseClient();
+  supabase.from('energy_records').insert({
+    user_id: supabase.auth.user().id,
+    timestamp: new Date().toISOString(),
+    energy_score: next,
+    previous_score: prev,
+    score_change: delta,
+    event_category: record?.category ?? null,
+    event_detail: record?.detail ?? null,
+    change_type: delta > 0 ? 'add' : 'subtract',
+    source
+  }).then(({ error }) => {
+    if (error) console.warn('云端记录失败，已暂存本地', error);
+  });
+
+  // 3. 更新UI
+  renderFishIcons(next);
+  updateTopDisplay(next);
+
+  // 4. 触发检查（单击来源时，延迟300ms后检查，避免动画期间弹窗）
+  if (source === 'quick') {
+    setTimeout(() => checkTriggers(next, prev), 300);
+  } else {
+    checkTriggers(next, prev);
+  }
+}
+```
+
+#### 2.4 加法二级入口（长按 + 触发）
+
+```
+流程：
+[长按 + 按钮]
+    ↓
+进入「加法详情页」
+    ↓
+显示大类选择：工作成就 / 情感支持 / 身体照顾 / 创造表达 / 其他
+    ↓
+（可选）输入具体事件（文字输入框，placeholder：说说是什么让你有能量的~）
+    ↓
+点击【记录 +0.5 条】
+    ↓
+调用 updateEnergy(+0.5, 'detail', { category, detail })
+    ↓
+返回首页，显示鱼干飞入动画
+```
+
+#### 2.5 减法二级入口（长按 - 触发）
+
+```
+流程：
+[长按 - 按钮]
+    ↓
+进入「减法详情页」
+    ↓
+显示精力杀手大类列表（从 energy_killers 排名靠前的条目优先展示）
+大类：工作决策 / 社交/情绪劳动 / 身体不适 / 家务/育儿 / 其他
+    ↓
+（可选）输入具体事件（文字输入框，placeholder：发生了什么让你有点累？）
+    ↓
+点击【记录 -0.5 条】
+    ↓
+调用 updateEnergy(-0.5, 'detail', { category, detail })
+    ↓
+返回首页，显示鱼干淡出动画
+```
+
+#### 2.6 数据存储
+
+**Supabase 表：`energy_records`**
+```sql
+create table public.energy_records (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  timestamp timestamptz default now(),
+  energy_score float not null,
+  previous_score float,
+  score_change float,
+  event_category text,
+  event_detail text,
+  change_type text check (change_type in ('add','subtract')),
+  source text check (source in ('quick','detail'))
+);
+```
+
+---
+
+### 功能 3：盲盒回血（微行动推荐）
+
+#### 3.1 触发条件与优先级（防冲突设计）
+
+> 所有触发检查通过统一入口 `checkTriggers(currentScore, previousScore)` 处理，内部按优先级执行。
+
+```javascript
+/**
+ * 统一触发检查入口
+ * 优先级：严重透支 > 慢性疲劳 > 日常盲盒
+ * 每次只触发一个，触发后设置冷却期
+ */
+async function checkTriggers(currentScore, previousScore) {
+  // 全局气泡冷却：每次气泡关闭后，3秒内不再触发新气泡
+  if (isBubbleCooldown()) return;
+
+  const userId = supabase.auth.user().id;
+
+  // 优先级1：严重透支预警
+  if (currentScore <= 3) {
+    const cooldownKey = `subtraction_cooldown_${getTodayDateString()}`;
+    if (!localStorage.getItem(cooldownKey)) {
+      localStorage.setItem(cooldownKey, 'true');
+      triggerSubtractionPermission(userId, currentScore, 'severe_exhaustion');
+      return; // 已触发，本次不再检查其他
+    }
+  }
+
+  // 优先级2：突然骤降（比上次降低超过50%）
+  if (previousScore && previousScore > 0) {
+    const dropRate = (previousScore - currentScore) / previousScore;
+    if (dropRate > 0.5 && currentScore > 3) { // >3 以免与优先级1重叠
+      triggerSubtractionPermission(userId, currentScore, 'sudden_drop');
+      return;
+    }
+  }
+
+  // 优先级3：慢性疲劳（连续3天同一时段≤5条）
+  if (currentScore <= 5) {
+    const isChronicFatigue = await checkChronicFatigue(userId);
+    if (isChronicFatigue) {
+      triggerSubtractionPermission(userId, currentScore, 'chronic_fatigue');
+      return;
+    }
+  }
+
+  // 优先级4：普通盲盒推荐（精力≤5且非以上情况）
+  if (currentScore <= 5) {
+    triggerBlindBox(userId);
+  }
+}
+```
+
+#### 3.2 盲盒抽取交互流程
+
+```
+[猫咪气泡：“主人小鱼干有点少哦，要不要抽个盲盒充充电？”]
+  ├─ 用户点击【抽盲盒】
+  │    ↓
+  │  展示盲盒卡片（行动文案 + 多媒体内容）
+  │    ↓
+  │  用户操作：【做完了】或 【换一个（最多换3次）】
+  │    │                        ↓
+  │    │                  重新抽取一个（换过3次后隐藏【换一个】按钮）
+  │    ↓
+  │  点击【做完了】→ 保存 blind_box_session 记录
+  │                → 猫咪气泡（可关闭）：“如果好一些了，可以点 + 增加小鱼干哦~”
+  │                   （注意：这是建议，不是强制，不等待用户响应，10秒后自动关闭）
+  │                → 标记本次盲盒完成，更新 blind_box_actions.last_used_at
+  │
+  └─ 用户关闭气泡（不抽）→ 静默关闭，不再弹出，记录忽略次数
+```
+
+#### 3.3 次日回访询问
+
+```javascript
+/**
+ * 每日首次打开时，检查昨日是否有未反馈的盲盒记录
+ * 若有，展示一次回访询问
+ */
+async function checkYesterdayBlindBoxFollowup(userId) {
+  const yesterday = getYesterdayDateString();
+  const { data: sessions } = await supabase
+    .from('blind_box_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('session_date', yesterday)
+    .eq('status', 'completed')
+    .is('feedback', null);
+
+  if (!sessions || sessions.length === 0) return;
+
+  const pending = sessions[0];
+  showCatBubble({
+    text: `上次的「${pending.action_text}」做完感觉好点吗？`,
+    actions: [
+      { label: '好多了 ✨', callback: () => submitFeedback(userId, pending.action_id, 'positive') },
+      { label: '没啥用', callback: () => submitFeedback(userId, pending.action_id, 'negative') }
+    ],
+    autoClose: 15000 // 15秒无操作自动关闭
+  });
+}
+```
+
+#### 3.4 推荐算法
+
+```javascript
+/**
+ * 加权随机抽取盲盒行动
+ * 权重 = base_probability × 个人反馈修正系数
+ * 连续换3次时，确保不重复推荐同一条目
+ */
+async function getRecommendedAction(userId, excludeIds = []) {
+  const { data: actions } = await supabase.from('blind_box_actions').select('*');
+  const { data: feedbacks } = await supabase.from('user_action_feedback').select('*').eq('user_id', userId);
+
+  let filtered = actions.filter(a => !excludeIds.includes(a.id));
+  if (filtered.length === 0) {
+    // 所有行动都被换过了，重置排除列表
+    filtered = actions;
+  }
+
+  const weighted = filtered.map(action => {
+    const userFeedbacks = feedbacks.filter(f => f.action_id === action.id);
+    let weight = action.base_probability;
+    userFeedbacks.forEach(f => {
+      if (f.feedback === 'positive') weight += 0.2;
+      else if (f.feedback === 'negative') weight = Math.max(weight - 0.1, 0.05);
+    });
+    return { ...action, weight };
+  });
+
+  const totalWeight = weighted.reduce((sum, a) => sum + a.weight, 0);
+  let rand = Math.random() * totalWeight;
+  for (const action of weighted) {
+    rand -= action.weight;
+    if (rand <= 0) return action;
+  }
+  return weighted[weighted.length - 1]; // fallback
+}
+```
+
+#### 3.5 数据存储
+
+**Supabase 表：`blind_box_actions`（行动库）**
+```sql
+create table public.blind_box_actions (
+  id uuid default gen_random_uuid() primary key,
+  action_text text not null,
+  media_type text,
+  media_url text,
+  base_probability float default 1.0,
+  category text
+);
+```
+
+**Supabase 表：`blind_box_sessions`（使用记录）**
+```sql
+create table public.blind_box_sessions (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  action_id uuid references blind_box_actions not null,
+  action_text text,
+  status text default 'completed',
+  feedback text,
+  session_date date default now(),
+  created_at timestamptz default now()
+);
+```
+
+**Supabase 表：`user_action_feedback`（反馈记录）**
+```sql
+create table public.user_action_feedback (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  action_id uuid references blind_box_actions not null,
+  feedback text check (feedback in ('positive','negative')),
+  timestamp timestamptz default now()
+);
+```
+
+---
+
+### 功能 4：树洞陪伴（AI 对话）
+
+#### 4.1 入口与界面
+
+- 入口：首页底部导航栏「树洞」图标，或电子宠物菜单【我想聊天】
+- 界面：标准聊天气泡界面，用户消息右侧，猫咪回复左侧（含猫咪头像）
+- 输入方式：文字输入 / 预设表情点选（😭 😤 😔 🙃 😮‍💨 😶 🫠）/ 语音输入（使用浏览器 Web Speech API 或 MediaRecorder）
+
+#### 4.2 AI 回应规则
+
+**每次调用 AI API 时，必须将以下内容作为 system prompt 传入：**
+
+```
+你是一只温柔、包容的小猫，用户正在向你倾诉情绪。
+
+【严格规则，不得违反】：
+1. 每次回应必须控制在 20 字以内（含标点）。
+2. 只表达共情和理解，不提供任何建议、解决方案或行动指引。
+3. 不追问用户的具体情况或细节。
+4. 不重复用户说的具体内容（避免“所以你是因为XXX才这样？”类句式）。
+5. 语气温暖、像朋友，可用“抱抱”“摸摸头”“嗯嗯”等词汇。
+6. 禁止输出任何格式标签、markdown、emoji之外的特殊符号。
+7. 如果用户输入包含自我伤害相关词汇（如“不想活”“去死”），
+   必须输出固定响应：“抱抱你，你很勇敢。如果需要帮助，可以拨打心理援助热线 400-161-9995。”
+   不得输出其他内容。
+
+【参考回应示例】：
+- “听起来真的很累了呢”
+- “抱抱你，辛苦了”
+- “嗯嗯，我懂的”
+- “没关系的，慢慢来”
+- “今天也很不容易吧”
+```
+
+**user prompt 模板：**
+```
+用户说：{user_input}
+```
+
+#### 4.3 引导跳转规则
+
+```javascript
+/**
+ * 连续倾诉检测：连续3条消息中均含有疲惫相关词汇时，触发一次温和引导
+ * 仅触发一次，不重复打扰
+ */
+const FATIGUE_KEYWORDS = ['累', '疲惫', '没力气', '好烦', '撑不住', '好难', '不想动'];
+
+function checkFatigueGuidance(recentMessages) {
+  if (recentMessages.length < 3) return;
+  const lastThree = recentMessages.slice(-3);
+  const allFatigue = lastThree.every(msg =>
+    FATIGUE_KEYWORDS.some(kw => msg.user_message.includes(kw))
+  );
+  if (allFatigue && !hasTriggeredGuidanceToday()) {
+    setGuidancePendingForNextReply(
+      "\n\n（要不要去记录一下现在的小鱼干数量？我陪你~）"
+    );
+    markGuidanceTriggeredToday();
+  }
+}
+```
+
+#### 4.4 数据存储
+
+**Supabase 表：`tree_hole_messages`**
+```sql
+create table public.tree_hole_messages (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  message_type text default 'text',
+  user_message text,
+  ai_response text,
+  timestamp timestamptz default now(),
+  storage_mode text default 'local_only'
+);
+```
+> 默认 `storage_mode: 'local_only'`，即树洞对话仅存储在本地 `localStorage`，用户可在设置中开启云端同步。
+
+---
+
+### 功能 5：电子宠物（陪伴感载体 + 功能集合入口）
+
+#### 5.1 形象规格
+
+- **视觉风格**：圆润可爱的手绘插画风格，身体造型饱满，线条有手绘笔触感，表情细腻丰富，配色以暖色系为主（米白/浅粉/淡橙），局部点缀彩色（粉色腮红、彩色领结）。
+- **明确要求**：不是几何形状的极简简笔画，而是接近 LINE Friends、Molang、Chiikawa 的圆润治愈插画风格。
+- **位置**：固定在屏幕右下角，悬浮于页面内容之上，使用固定定位（`position: fixed`）。
+- **层级**：z-index 最高（`z-index: 9999`），确保任何页面都可见。
+
+#### 5.2 动态状态机
+
+```javascript
+/**
+ * 宠物状态根据精力值自动切换，每次精力值变化后调用
+ * 状态优先级：special_event > energy_state > idle
+ */
+function updatePetState(currentEnergy) {
+  if (currentEnergy <= 3) {
+    setPetAnimation('comfort'); // 蹭蹭、递水杯动画
+  } else if (currentEnergy >= 8) {
+    setPetAnimation('happy');   // 开心跳跃
+  } else {
+    setPetAnimation('normal');  // 普通站立
+  }
+}
+
+/**
+ * 长时间无操作（5分钟）后切换到 idle 状态
+ * 有任何操作时立即恢复
+ */
+let idleTimer = null;
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  if (getPetAnimation() === 'sleep') setPetAnimation('normal');
+  idleTimer = setTimeout(() => {
+    setPetAnimation(Math.random() > 0.5 ? 'yawn' : 'sleep');
+  }, 5 * 60 * 1000);
+}
+```
+
+#### 5.3 点击菜单
+
+**点击电子宠物** → 从底部弹出菜单（bottom sheet 样式），包含：
+- 【这个App怎么用？】→ 调用 AI 生成简短使用指南（见 5.4）
+- 【我想聊天】→ 跳转到树洞陪伴页
+- 【查看我的日报】→ 跳转到日报页面
+- 【设置】→ 跳转到设置页面
+
+#### 5.4 AI 帮助生成
+
+**system prompt：**
+```
+你是「小鱼干」App 的陪伴小猫。
+回答用户关于 App 使用方法的问题时，必须：
+1. 回答控制在 50 字以内
+2. 只介绍核心功能：记录小鱼干数量（+ - 按钮）、抽盲盒、树洞聊天
+3. 语气温暖简洁，像朋友介绍，不像说明书
+4. 若用户问的不是使用方法，友好地告知：「这个问题我暂时还不会回答，但我很愿意陪你聊天哦~」
+```
+
+**user prompt：**
+```
+用户问：{user_question}
+```
+
+**缓存策略：** “这个App怎么用”类问题使用本地固定文案，不发起 AI API 调用：
+```javascript
+const HELP_STATIC_RESPONSES = {
+  '怎么用': '点击 + 和 - 记录精力变化，小鱼干少了就抽个盲盒回回血，想说说心里话就去树洞找我～',
+  '是什么': '小鱼干是你的精力值，多了说明状态好，少了就要多关爱自己哦～'
+};
+```
+
+#### 5.5 气泡显示规范（严格控制）
+
+| 触发场景 | 是否显示气泡 | 备注 |
+|---------|------------|------|
+| 单击 +/- 按钮 | ❌ 不显示 | 仅动画反馈 |
+| 长按进入二级入口 | ❌ 不显示 | 页面导航代替 |
+| 精力 ≤ 5（盲盒触发） | ✅ 显示 | 每日最多3次 |
+| 精力 ≤ 3（减法许可） | ✅ 显示 | 每日最多1次 |
+| 盲盒完成后建议 | ✅ 显示（可关闭） | 10秒自动消失 |
+| 次日回访询问 | ✅ 显示 | 每日最多1次，15秒自动消失 |
+| 首页初始欢迎语 | ✅ 显示 | 每日首次打开显示1次 |
+
+> ⚠️ 气泡唯一性：全局状态 `activeBubble` 控制，显示新气泡前必须先调用 `dismissActiveBubble()`。
+
+---
+
+### 功能 6：记录精力消耗/补充原因
+
+此功能已整合到功能 2 的长按二级入口中，见功能 2.4（加法二级入口）和 2.5（减法二级入口），无需单独开发独立页面。
+
+**事件大类枚举（前后端统一使用，禁止使用其他字符串）：**
+```javascript
+const EVENT_CATEGORIES = {
+  ADD: ['工作成就', '情感支持', '身体照顾', '创造表达', '其他'],
+  SUBTRACT: ['工作决策', '社交/情绪劳动', '身体不适', '家务/育儿', '其他']
+};
+```
+
+---
+
+### 功能 7：AI 生成个人日报
+
+#### 7.1 触发逻辑
+
+```javascript
+/**
+ * 日报生成触发规则
+ * 条件1：每天 21:00 自动生成（通过 Supabase Edge Function 定时触发器或外部 cron）
+ * 条件2：用户手动点击【查看我的日报】时，若今日日报不存在，立即生成
+ * 防止重复：检查 daily_reports 中当日记录是否已存在，存在则不重新生成
+ */
+async function generateDailyReport(userId, date) {
+  const supabase = getSupabaseClient();
+  
+  // 前置检查：当日是否已有日报
+  const { data: existing } = await supabase
+    .from('daily_reports')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('report_date', date)
+    .maybeSingle();
+  if (existing) return existing;
+
+  // 数据充分性检查：当日记录为0时不生成（避免空报告）
+  const { data: records } = await supabase
+    .from('energy_records')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('timestamp', `${date}T00:00:00Z`)
+    .lt('timestamp', `${date}T23:59:59Z`);
+  if (!records || records.length === 0) {
+    return { content: null, reason: 'no_data' }; // 前端展示：“今天还没有记录，明天见~” 
+  }
+
+  const avgEnergy = records.reduce((sum, r) => sum + r.energy_score, 0) / records.length;
+  const minRecord = records.reduce((min, r) => r.energy_score < min.energy_score ? r : min);
+  const maxRecord = records.reduce((max, r) => r.energy_score > max.energy_score ? r : max);
+  const events = records.filter(r => r.event_category).map(r => `${r.event_category}${r.event_detail ? `(${r.event_detail})` : ''}`);
+  
+  const { data: sessions } = await supabase
+    .from('blind_box_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('session_date', date);
+    
+  const { data: baseline } = await supabase
+    .from('user_baseline')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+  const { phase } = calculateTodayEnergy(baseline);
+
+  const systemPrompt = `
+你是「小鱼干」App 的陪伴猫咪，正在为用户生成今日精力日报。
+
+【严格约束，不得违反】：
+1. 只能描述以下真实发生的数据，绝对不能编造任何未发生的事件或情绪。
+2. 不得使用“可能”“也许”“或许”等推测语气描述当日已发生的事实。
+3. 不得在日报中对用户进行评判、打分或说教。
+4. 第二段建议必须基于今日数据的实际规律，无规律则不写第二段。
+5. 第三段周期预测仅在 cycle_phase 不为「未追踪」时出现。
+6. 总字数控制在 120-180 字之间。
+
+【语气要求】：温暖、陪伴感、像朋友写给朋友的观察日记，不说教、不催促。
+  `.trim();
+
+  const userPrompt = `
+今天的数据（${date}）：
+- 精力记录条数：${records.length} 条
+- 平均精力值：${avgEnergy.toFixed(1)} 条
+- 最低精力：${minRecord.energy_score} 条（${formatHour(minRecord.timestamp)}）
+- 最高精力：${maxRecord.energy_score} 条（${formatHour(maxRecord.timestamp)}）
+- 记录的消耗/补充事件：${events.length > 0 ? events.join('、') : '（无详细记录）'}
+- 使用盲盒次数：${sessions.length} 次${sessions.length > 0 ? `，行动：${sessions.map(s => s.action_text).join('、')}` : ''}
+- 当前周期阶段：${phase}
+
+请生成今日精力日报。
+  `.trim();
+
+  // 调用 Edge Function 以保护 API Key
+  const { data: { content } } = await supabase.functions.invoke('generate-daily-report', {
+    body: { systemPrompt, userPrompt }
+  });
+
+  await supabase.from('daily_reports').insert({
+    user_id: userId,
+    report_date: date,
+    report_content: content,
+    generated_at: new Date().toISOString()
+  });
+
+  return { content };
+}
+```
+
+#### 7.2 前端展示
+
+- 日报以卡片形式展示，顶部显示日期，底部有【分享到朋友圈】按钮
+- 分享生成截图（使用 `html2canvas`），截图尺寸为 750×1000px
+- 历史日报列表按日期倒序展示，分页加载（每页10条）
+- 当日无记录时展示占位卡片：“今天还没有记录，明天见~”
+
+#### 7.3 数据存储
+
+**Supabase 表：`daily_reports`**
+```sql
+create table public.daily_reports (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  report_date date not null,
+  report_content text,
+  generated_at timestamptz default now(),
+  unique(user_id, report_date)
+);
+```
+
+---
+
+### 功能 8：趣味激励彩蛋（虚拟勋章）
+
+#### 8.1 成就列表与触发条件
+
+| 称号 | 触发条件 | 触发类型 |
+|------|---------|---------|
+| 人类一败涂地 | 连续3天在12:00前精力值降至≤3条 | consecutive_low_energy |
+| 坚持小能手 | 连续7天至少记录1次精力值 | consecutive_records |
+| 盲盒狂魔 | 单日使用盲盒 ≥ 5次 | daily_blind_box_count |
+| 满电超人 | 单日所有精力记录均 ≥ 8条（且至少记录3次） | daily_high_energy |
+
+#### 8.2 检查逻辑
+
+```javascript
+async function checkAchievements(userId) {
+  const { data: achievements } = await supabase.from('achievements').select('*');
+  const { data: unlocked } = await supabase.from('user_achievements').select('*').eq('user_id', userId);
+  const unlockedIds = unlocked.map(a => a.achievement_id);
+  const newlyUnlocked = [];
+
+  for (const achievement of achievements) {
+    if (unlockedIds.includes(achievement.id)) continue;
+    const condition = achievement.trigger_condition;
+    let shouldUnlock = false;
+
+    switch (condition.type) {
+      case 'consecutive_low_energy':
+        shouldUnlock = await checkConsecutiveLowEnergy(userId, condition.days, condition.time_range, condition.threshold);
+        break;
+      case 'consecutive_records':
+        shouldUnlock = await checkConsecutiveRecords(userId, condition.days);
+        break;
+      case 'daily_blind_box_count':
+        shouldUnlock = await checkDailyBlindBoxCount(userId, condition.count);
+        break;
+      case 'daily_high_energy':
+        shouldUnlock = await checkDailyHighEnergy(userId, condition.threshold, condition.min_records ?? 3);
+        break;
+    }
+
+    if (shouldUnlock) {
+      await supabase.from('user_achievements').insert({ user_id: userId, achievement_id: achievement.id });
+      newlyUnlocked.push(achievement);
+    }
+  }
+
+  if (newlyUnlocked.length > 0) {
+    showAchievementQueue(newlyUnlocked);
+  }
+}
+```
+
+#### 8.3 弹窗设计
+
+- 手绘风格徽章 + 幽默文案
+- 弹窗底部：【炫耀一下（分享到朋友圈）】和【收下了】两个按钮
+- 多个成就同时解锁时，使用队列逐个弹出（点击【收下了】后显示下一个）
+
+---
+
+### 功能 9：减法许可
+
+#### 9.1 三种触发场景（已整合到 `checkTriggers` 函数，见功能 3）
+
+**场景1：严重透支预警（精力 ≤ 3条）**
+
+```
+猫咪气泡文案（根据精力值动态生成）：
+  精力 = 3条：“检测到主人的小鱼干只剩3条了… 是不是有点累了？我们先休息一下好吗？”
+  精力 = 2条：“检测到主人的小鱼干快没了… 今天辛苦了，先停下来照顾一下自己吧？”
+  精力 ≤ 1条：“主人，小鱼干快见底了。什么都可以先放一放，你最重要。”
+
+按钮：
+  [好呀，先停一停] → 猫咪继续问：“那空出来的15分钟，要不要抽一个快速回血盲盒？”
+                      → 进入盲盒抽取流程（见功能3）
+  [我再撑一会]    → 静默关闭气泡，记录用户选择，不再重复触发（今日该优先级已触发过）
+```
+
+**场景2：突然骤降（短时间内精力下降超过50%）**
+
+```
+猫咪气泡文案：“主人今天消耗好快，看起来发生了什么消耗很大的事。先喘口气好吗？”
+
+按钮：
+  [嗯，缓一缓]  → 进入盲盒抽取流程
+  [没事，继续]  → 静默关闭
+```
+
+**场景3：慢性疲劳期（连续3天同一时段 ≤ 5条）**
+
+```
+猫咪气泡文案：“主人最近这个时段总是精力不太好，要不我们今天这个时间先不安排重要事情了？”
+
+按钮：
+  [好的，摸个鱼]  → 进入盲盒抽取流程
+  [我再看看]     → 静默关闭
+```
+
+#### 9.2 精力杀手库
+
+```javascript
+async function recordEnergyKillerIfNeeded(userId, eventCategory, scoreChange) {
+  if (!eventCategory || Math.abs(scoreChange) < 2) return;
+
+  const { data: existing } = await supabase
+    .from('energy_killers')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('event_category', eventCategory)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase.from('energy_killers').update({
+      killer_score: existing.killer_score + 1,
+      last_triggered_at: new Date().toISOString()
+    }).eq('id', existing.id);
+  } else {
+    await supabase.from('energy_killers').insert({
+      user_id: userId,
+      event_category: eventCategory,
+      killer_score: 1,
+      last_triggered_at: new Date().toISOString()
+    });
+  }
+}
+
+async function checkKillerWarning(userId, selectedCategory) {
+  const { data: killers } = await supabase
+    .from('energy_killers')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('event_category', selectedCategory)
+    .maybeSingle();
+    
+  if (killers && killers.killer_score >= 3) {
+    showCatBubble({
+      text: `主人，上次做「${selectedCategory}」好像很耗精力，要不要先存个档？累了记得喊我帮你减负哦。`,
+      actions: [{ label: '知道啦', callback: dismissBubble }],
+      autoClose: 8000
+    });
+  }
+}
+```
+
+**Supabase 表：`energy_killers`**
+```sql
+create table public.energy_killers (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  event_category text not null,
+  killer_score int default 1,
+  last_triggered_at timestamptz,
+  unique(user_id, event_category)
+);
+```
+
+---
+
+## 四、UI 设计规范
+
+### 4.1 色彩系统
+
+| 用途 | 色值 | 说明 |
+|------|------|------|
+| 背景色 | `#F5F5F0` | 米白色 |
+| 主交互色 | `#FFD4D4` | 淡粉，按钮、选中态、小鱼干填充 |
+| 次要强调色 | `#FFE4CC` | 浅橙，卡片背景、标签 |
+| 辅助提示色 | `#FFF4CC` | 奶黄，气泡背景 |
+| 正文颜色 | `#333333` | 深灰 |
+| 图标线条色 | `#666666` | 中灰 |
+| 按钮按下态 | `#F0B8B8` | 深粉 |
+
+**禁止使用**：纯白背景（#FFFFFF）、高饱和度色彩、荧光色、冷色调（蓝绿系）
+
+### 4.2 核心图标规范
+
+**小鱼干图标：**
+- 标准尺寸：24×24px
+- 填充色：`#FFD4D4`，轮廓色：`#666666`
+- 半透明态（0.5条）：`opacity: 0.4`，过渡：`transition: opacity 100ms ease`
+- 风格：手绘感、圆润、治愈系
+
+**+/- 按钮：**
+- 形状：圆形，尺寸：48×48px
+- 默认色：`#FFD4D4`，按下色：`#F0B8B8`
+- 图标：`+`/`-` 符号，颜色白色或深灰，字重 medium
+- 阴影：`0 2px 8px rgba(255, 212, 212, 0.4)`
+- 点击反馈：`transform: scale(0.95)` → `scale(1.0)`，100ms
+
+### 4.3 图形风格
+
+- **电子宠物**：圆润可爱手绘插画风格，参考 LINE Friends、Molang、Chiikawa
+- **明确排除**：几何形状极简简笔画（如 Headspace 风格）
+- **整体氛围参考**：Headspace（氛围）、Tide潮汐（温暖色调）、Finch（陪伴感）
+
+### 4.4 字体与排版
+
+| 元素 | 字号 | 字重 |
+|------|------|------|
+| 主标题 | 24px | Medium (500) |
+| 正文 | 16px | Regular (400) |
+| 按钮文字 | 18px | Medium (500) |
+| 副文案/小字 | 13px | Regular (400) |
+
+- 行距：1.8倍行高
+- 字体：系统默认
+
+### 4.5 布局要求
+
+- 每屏最多展示 1-2 个核心操作入口
+- 主要按钮：高度 ≥ 50px，宽度 ≥ 120px
+- 元素间距 ≥ 20px
+- 首屏结构（从上到下）：
+  1. 顶部状态栏：日期 + “今天还有 X 条小鱼干”
+  2. 中部核心区：圆形小鱼干环绕猫咪 + 左右 +/- 按钮
+  3. 底部导航栏
+  4. 右下角悬浮：电子宠物
+
+### 4.6 响应式适配
+
+| 屏幕宽度 | 猫咪尺寸 | 小鱼干环绕半径 | +/- 按钮距猫咪中心 |
+|---------|---------|-------------|-----------------|
+| < 375px | 180×180px | 100px | 70px |
+| 375-414px | 200×200px | 120px | 80px |
+| > 414px | 220×220px | 140px | 100px |
+
+### 4.7 动画规范
+
+**小鱼干飞入动画（点击 + 触发）：**
+```css
+@keyframes fishFlyIn {
+  0%   { transform: scale(0.3) translate(0, 0); opacity: 0; }
+  60%  { transform: scale(1.1) translate(var(--tx), var(--ty)); opacity: 1; }
+  100% { transform: scale(1.0) translate(var(--tx), var(--ty)); opacity: 1; }
+}
+/* 时长：250ms，缓动：ease-out */
+/* 必须使用 CSS transform + opacity，禁止使用 top/left 以保障性能 */
+```
+
+**小鱼干淡出动画（点击 - 触发）：**
+```css
+@keyframes fishFlyOut {
+  0%   { transform: scale(1.0); opacity: 1; }
+  100% { transform: scale(0.3); opacity: 0; }
+}
+/* 时长：200ms，缓动：ease-in */
+```
+
+**按钮点击反馈：**
+```css
+.energy-button:active {
+  transform: scale(0.95);
+  transition: transform 80ms ease;
+}
+```
+
+**宠物动画**：使用 Lottie JSON 格式，通过 `lottie-web` 加载，确保在低端设备上流畅。动画文件存放于 Supabase Storage。
+
+---
+
+## 五、技术栈与部署规范 (H5 + Supabase)
+
+### 5.1 推荐技术栈
+
+**前端：** React 18 / Vue 3 SPA (H5)
+- UI 组件库：Vant UI (H5) / Ant Design Mobile
+- 动画库：lottie-web
+- HTTP 客户端 / 数据库客户端：`@supabase/supabase-js`
+- 截图工具：html2canvas
+
+**后端（BaaS）：Supabase**
+- 数据库：PostgreSQL（免费 500MB）
+- 认证：Supabase Auth（邮箱登录等）
+- 文件存储：Supabase Storage（存放 Lottie、音频、图片）
+- 边缘函数：Supabase Edge Functions（Deno，用于代理调用 AI API，保护 Key）
+- 定时任务：通过外部 Cron 服务（如 GitHub Actions）调用 Edge Function 实现每日日报生成
+
+### 5.2 必须遵守的安全规范
+
+1. **API Key 保护**：AI 服务 Key 必须存储在 Supabase Edge Functions 环境变量中，前端绝不暴露。
+2. **数据隔离**：所有表启用 RLS，策略为 `user_id = auth.uid()`。
+3. **用户身份**：完全依赖 Supabase Auth，前端通过 SDK 获取用户和管理 session。
+
+### 5.3 数据库索引
+
+以下字段必须建立索引：
+
+| 表 | 索引字段 | 类型 |
+|------|---------|------|
+| energy_records | (user_id, timestamp) | 复合索引 |
+| blind_box_sessions | (user_id, session_date) | 复合索引 |
+| daily_reports | (user_id, report_date) | 唯一复合索引 |
+| energy_killers | (user_id, event_category) | 唯一复合索引 |
+| user_achievements | (user_id, achievement_id) | 唯一复合索引 |
+
+---
+
+## 六、完整数据模型 (Supabase SQL)
+
+```sql
+-- 开启 RLS 示例
+alter table public.user_baseline enable row level security;
+create policy "Individuals can own baseline" on public.user_baseline
+  for all using (auth.uid() = user_id);
+
+-- 其余表依此类推
+```
+
+（前文各节已分别给出建表语句，此处不再重复列出所有表结构。）
+
+---
+
+## 七、开发注意事项
+
+### 7.1 隐私与数据安全
+
+- **树洞对话**：默认仅存储本地 `localStorage`，用户在设置中显式开启后才同步云端。
+- **敏感信息**：不收集真实姓名、手机号；云端仅关联 Supabase Auth UUID。
+- **数据删除**：设置页提供【删除所有数据】，点击后需二次确认，删除所有云端和本地记录。
+- **心理危机处理**：树洞 AI 检测到高危词汇时，输出固定危机干预文案 + 心理援助热线。
+
+### 7.2 性能优化要点
+
+- **动画性能**：小鱼干动画只用 `transform` + `opacity`，不修改 `left/top`。
+- **Lottie 优化**：动画 JSON 文件放在 Supabase Storage，按需加载，不打包进 JS bundle。
+- **数据库查询**：所有高频查询字段按索引要求建立。
+- **本地缓存**：盲盒行动库、成就库等静态数据启动时一次性缓存到 `localStorage`，后续从 Supabase 定期刷新。
+- **分页加载**：日报列表每页10条。
+
+### 7.3 AI 调用成本控制
+
+- **日报生成**：每日最多一次，生成后缓存，不重复调用。
+- **树洞对话**：优先使用轻量模型；每日总量限制可酌情在前端或函数上加。
+- **帮助问答**：常见问题使用本地固定文案。
+- **token 限制**：prompt 控制在 500 tokens 以内。
+
+### 7.4 用户体验细节
+
+- **加载状态**：所有网络请求显示宠物摇尾巴动画，超过3秒显示“主人，网络有点慢，稍等一下~”。
+- **错误处理**：网络失败时显示友好文案 “主人，网络好像有点问题，稍后再试试吧~”，允许重试。
+- **离线保障**：精力记录先写 `localStorage`，联网后自动同步；同步失败时本地数据不丢失。
+- **空状态**：历史日报列表为空时，展示 “还没有日报，今天记几条精力值就能生成了~”。
+
+### 7.5 边界与异常处理
+
+| 场景 | 处理方式 |
+|------|---------|
+| 精力值达到上限（10条） | + 按钮变灰不可点，猫咪说 “已经满能量啦，好好保持~” |
+| 精力值达到下限（0条） | - 按钮变灰不可点，猫咪显示关怀气泡（减法许可优先级最高） |
+| 基线测试中途关闭小程序 | 重新打开时询问：“上次的体检做到一半了，要继续吗？” → 恢复到中断的那一页 |
+| AI API 调用失败 | 树洞使用预设固定回复降级（随机从10条预设回复中选一条），日报显示“今天的日报生成遇到了点麻烦，明天再试试~” |
+| 用户无任何精力记录的日报请求 | 返回占位文案，不调用 AI |
+| 周期数据中 last_period_start 为未来日期 | 忽略周期数据，P_cycle = 1.0，不报错崩溃 |
+| 用户快速连续点击 +/- 按钮 | 允许连续响应，每次点击独立处理；但触发检查有300ms防抖，避免重复弹窗 |
+
+---
+
+## 八、MVP 开发优先级
+
+### 第一阶段（核心闭环，目标1-2周）
+1. ✅ 初始精力基线测试（四维度建模 + 欢迎引导 + 进度条 + 结果直接进首页）
+2. ✅ 精力值快速记录（圆形布局 + +/- 按钮 + 鱼干动画，初始值来自基线）
+3. ✅ 电子宠物基础展示（手绘风格静态图 + 简单状态动画）
+4. ✅ 盲盒回血（10个预设行动 + 完成后气泡建议）
+5. ✅ 树洞陪伴（文字输入 + AI 回复 + 危机词汇检测）
+
+### 第二阶段（完善体验，目标1周）
+6. ✅ 减法许可（三种触发场景 + 统一优先级逻辑）
+7. ✅ 盲盒反馈机制（评价 + 推荐权重调整 + 次日回访）
+8. ✅ 精力消耗事件记录（长按二级入口 + 精力杀手库）
+
+### 第三阶段（增值功能，目标1周）
+9. ✅ AI 生成日报（严格数据约束 + 温暖文风 + 分享截图）
+10. ✅ 趣味激励彩蛋（4个初始成就 + 队列弹窗）
+11. ✅ 树洞陪伴语音输入
+12. ✅ 宠物 Lottie 动画替换
+
+### 第四阶段（持续迭代）
+13. ✅ 性能优化（Lottie 云存储化 + 数据库索引验证）
+14. ✅ 用户反馈收集入口
+15. ✅ 扩充盲盒行动库（目标 50 条以上）
+16. ✅ 新增成就类型
+
+---
+
+## 九、示例文案库
+
+### 9.1 盲盒行动文案（20个示例）
+
+**放松类：**
+1. “伸个懒腰，做3次深呼吸”
+2. “闭眼听雨声3分钟” ＋ 雨声音频
+3. “看一张可爱的猫猫图片” ＋ 治愈图片
+4. “喝一杯温水，慢慢喝”
+5. “站起来走动3分钟，看看窗外”
+
+**感官类：**
+6. “闻一闻咖啡或茶的香气”
+7. “摸摸柔软的东西（抱枕、毛毯）”
+8. “听一首3分钟的轻音乐” ＋ 音乐链接
+9. “看一段治愈小视频” ＋ 视频链接
+10. “吃一颗糖或一小块巧克力”
+
+**身体类：**
+11. “做5次肩颈拉伸”
+12. “按摩太阳穴1分钟”
+13. “用冷水洗把脸”
+14. “做10个开合跳”
+15. “躺下来闭眼3分钟”
+
+**趣味类：**
+16. “给植物浇水，看看它长大了吗”
+17. “整理桌面，扔掉一张废纸”
+18. “给朋友发一个表情包”
+19. “看一个搞笑段子” ＋ 文字内容
+20. “对着镜子做个鬼脸”
+
+### 9.2 宠物对话文案库
+
+**首次引导（基线测试前）：**
+- “主人好呀！每个人每天的精力就像小鱼干一样，用一点就少一点。让我先帮你算算今天有几条吧~”
+
+**进入首页（基线测试完成后，每日首次）：**
+- “今天有 {S_initial} 条小鱼干，我们一起好好保护它们吧~”
+- 黄体期额外追加：“处于经前敏感期哦，今天要对自己温柔一点~”
+
+**气泡文案（按场景）：**
+- 精力 ≤ 5条（盲盒触发）：“主人小鱼干有点少哦，要不要抽个盲盒充充电？”
+- 精力 3条（严重预警）：“检测到主人的小鱼干只剩3条了… 是不是有点累了？先休息一下好吗？”
+- 精力 ≤ 1条（最低值）：“主人，小鱼干快见底了。什么都可以先放一放，你最重要。”
+- 精力 ≥ 7条：无气泡，小猫开心跳跃动画
+- 精力到达上限10条：“已经满能量啦，好好保持~”
+
+**树洞陪伴（AI 回复参考）：**
+- “听起来真的很累了呢”
+- “抱抱你，辛苦了”
+- “嗯嗯，我懂的”
+- “没关系的，慢慢来”
+- “今天也很不容易吧”
+- 引导跳转（连续倾诉3条）：“要不要去记录一下现在的小鱼干数量？我陪你~”
+
+**盲盒推荐：**
+- “主人小鱼干有点少哦，要不要抽个盲盒充充电？”
+- 完成后：“如果好一些了，可以点 + 增加小鱼干哦~”（可关闭，10秒自动消失）
+
+**成就解锁（示例）：**
+- “恭喜主人解锁新称号：人类一败涂地！（连续3天中午前小鱼干耗尽）”
+
+---
+
+# 附录：测试用例 (v3.1 公式)
+
+## 测试用例一：正常流程——首次用户完成基线测试后进入首页
+
+**前置条件：** 标准电池 (B=7)，切换 (O_weight=0.7)，黄体期 (P_cycle=0.7)
+
+**预期计算：**
+```
+raw = (7×0.6 + 0.7×0.4×10) × 0.7 = (4.2 + 2.8) × 0.7 = 7 × 0.7 = 4.9
+roundToHalf(4.9) = 5.0
+clamp(5.0, 0, 10) = 5.0
+```
+**预期 S_initial = 5.0 条小鱼干。**  
+结果页显示 5.0 条，文案包含“黄体期”和“切换”，并追加经前敏感期提示。
+
+---
+
+## 测试用例二：边界情况——精力值边界操作与多触发条件竞争
+
+当前精力 3.5，单击两次减号：
+- 第一次：3.5→3.0，触发严重透支预警气泡（今日仅一次）。
+- 第二次：3.0→2.5，不触发新气泡（今日冷却已存在）。
+- 精力 0.5 再点减：变 0.0，按钮变灰，触发减法许可。
+
+---
+
+## 测试用例三：公式验证——不同基线组合
+
+| 输入 (B, O, P) | 计算过程 | 预期结果 |
+|-----------|------|------|
+| (4, 1.0, 1.2) | (2.4+4)×1.2=7.68 | **7.5** |
+| (7, 0.7, 0.8) | (4.2+2.8)×0.8=5.6 | **5.5** |
+| (10, 0.6, 1.0) | (6+2.4)×1=8.4 | **8.5** |
+| (7, 1.0, 0.7) | (4.2+4)×0.7=5.74 | **5.5** |
+
+---
+
+## 测试用例四：异常情况——AI API 调用失败降级
+
+树洞发送消息，AI 失败，随机预设回复“抱抱你，辛苦了”，无技术报错，消息正常显示。
+
+---
+
+## 测试用例五：正常流程——次日打开触发盲盒回访询问
+
+昨天有未反馈盲盒“闭眼听雨声”，今日首次打开，显示回访气泡：“上次的「闭眼听雨声3分钟」做完感觉好点吗？” 提供“好多了”和“没啥用”选项，15秒自动关闭。
+
+---
+
+**文档结束。请严格按照此 PRD 实现，所有疑问以本文档为准。**

@@ -14,3 +14,38 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Send a message to the cat companion. Replies are gentle and ≤20 chinese chars.
+ * @summary Tree-hole companion chat
+ */
+export const treeHoleChatBodyMessageMax = 500;
+
+export const TreeHoleChatBody = zod.object({
+  message: zod.string().min(1).max(treeHoleChatBodyMessageMax),
+});
+
+export const TreeHoleChatResponse = zod.object({
+  reply: zod.string(),
+  crisis: zod.boolean(),
+});
+
+/**
+ * @summary Generate a personalized daily energy report
+ */
+export const GenerateDailyReportBody = zod.object({
+  date: zod.string(),
+  recordCount: zod.number(),
+  averageEnergy: zod.number(),
+  minEnergy: zod.number(),
+  minTime: zod.string().optional(),
+  maxEnergy: zod.number(),
+  maxTime: zod.string().optional(),
+  events: zod.array(zod.string()),
+  blindBoxActions: zod.array(zod.string()),
+  cyclePhase: zod.string(),
+});
+
+export const GenerateDailyReportResponse = zod.object({
+  content: zod.string(),
+});

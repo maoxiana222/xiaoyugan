@@ -1,27 +1,50 @@
-# Workspace
+# 小鱼干 · 精力陪伴 (Little Fish Stick — Energy Companion)
 
-## Overview
+A Chinese-language H5 mobile companion app for energy/mood tracking. Featuring a hand-drawn cat companion who helps users track daily energy as "fish sticks" (鱼干 = small fish), with subtraction-permission nudges, blind-box recovery actions, an AI tree-hole chat, and an AI-generated daily report.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+## Architecture
 
-## Stack
+This is a pnpm monorepo with three artifacts:
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **`artifacts/xiaoyugan/`** (kind: `web`) — The H5 React + Vite frontend mounted at `/`. localStorage-first; no auth. Routes:
+  - `/` — Home (fish-stick ring around cat, ± buttons with long-press for reasons)
+  - `/baseline` — 4-step baseline test (formula `S = round(((B×0.6)+(O×0.4×10))×P, 0.5)`)
+  - `/tree-hole` — AI cat chat (≤22 char replies, crisis-keyword detection → 400-161-9995)
+  - `/report` — Daily AI report + 14-day strip + per-day timeline
+  - `/profile` — Nickname, cycle phase, reset, clear data
+  - `/achievements` — Achievement wall (8 milestones)
+  - `/blindbox` — 20 preset recovery actions with countdown
+- **`artifacts/api-server/`** (kind: `api`) — Express server at `/api` with two endpoints:
+  - `POST /api/ai/tree-hole` → tree-hole chat (uses Claude Haiku)
+  - `POST /api/ai/daily-report` → daily report (uses Claude Sonnet)
+- **`artifacts/mockup-sandbox/`** (kind: `design`) — Unused for this app, kept from scaffold.
 
-## Key Commands
+## Backend dependencies
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+- Anthropic AI via Replit AI Integrations (no user-supplied API key required). Env vars `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` and `AI_INTEGRATIONS_ANTHROPIC_API_KEY` are auto-provisioned.
+- PostgreSQL is provisioned but **not used** — all user data lives in browser localStorage.
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## Shared libraries
+
+- `lib/api-spec/openapi.yaml` — OpenAPI source of truth (run `pnpm --filter @workspace/api-spec run codegen` after changes)
+- `lib/api-client-react/` — generated React Query hooks
+- `lib/api-zod/` — generated Zod schemas
+- `lib/integrations-anthropic-ai/` — thin wrapper exporting the Anthropic SDK client
+- `lib/db/` — Drizzle schemas (currently unused)
+
+## Frontend conventions
+
+- localStorage keys: `xiaoyugan_baseline`, `xiaoyugan_records`, `xiaoyugan_profile`, `xiaoyugan_treehole`, `xiaoyugan_blindbox`, `xiaoyugan_achievements`, `xiaoyugan_triggers_today`. All read/write via `src/lib/storage.ts` (which provides hooks that re-render on cross-component updates).
+- Color palette: bg `#F5F5F0`, primary pink `#FFD4D4`, secondary orange `#FFE4CC`, bubble yellow `#FFF4CC`, text `#333`. **No pure white, no cool tones, no emojis.**
+- Animations via Framer Motion (springs, never linear). Toasts via Sonner. Drawers via Vaul (shadcn).
+- Long-press detection: 600ms hold opens the reason drawer; tap = silent ±1 with toast.
+
+## Subtraction-permission triggers (priority queue, max 1 per day per priority)
+
+1. Energy ≤ 2 → "今天的鱼干很少了，要不要早点休息？"
+2. 3 consecutive consume records → "今天好像一直在消耗，给自己留点鱼干？"
+3. In luteal/menstrual phase → "现在是 [阶段]，本来就比较累..."
+
+## Crisis safety
+
+Tree-hole backend matches Chinese crisis keywords (不想活/去死/自杀/想死/活不下去/结束生命/了结自己) and returns a fixed safety reply with the 400-161-9995 hotline. The frontend renders such replies as a special bordered card with a `tel:` button.

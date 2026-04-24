@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: ai
+    description: AI companion endpoints (tree-hole chat, daily report)
 paths:
   /healthz:
     get:
@@ -24,6 +26,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /ai/tree-hole:
+    post:
+      operationId: treeHoleChat
+      tags: [ai]
+      summary: Tree-hole companion chat
+      description: Send a message to the cat companion. Replies are gentle and ≤20 chinese chars.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TreeHoleRequest"
+      responses:
+        "200":
+          description: Reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TreeHoleResponse"
+  /ai/daily-report:
+    post:
+      operationId: generateDailyReport
+      tags: [ai]
+      summary: Generate a personalized daily energy report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DailyReportRequest"
+      responses:
+        "200":
+          description: Report content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyReportResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +72,65 @@ components:
           type: string
       required:
         - status
-
+    TreeHoleRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+      required:
+        - message
+    TreeHoleResponse:
+      type: object
+      properties:
+        reply:
+          type: string
+        crisis:
+          type: boolean
+      required:
+        - reply
+        - crisis
+    DailyReportRequest:
+      type: object
+      properties:
+        date:
+          type: string
+        recordCount:
+          type: integer
+        averageEnergy:
+          type: number
+        minEnergy:
+          type: number
+        minTime:
+          type: string
+        maxEnergy:
+          type: number
+        maxTime:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        blindBoxActions:
+          type: array
+          items:
+            type: string
+        cyclePhase:
+          type: string
+      required:
+        - date
+        - recordCount
+        - averageEnergy
+        - minEnergy
+        - maxEnergy
+        - events
+        - blindBoxActions
+        - cyclePhase
+    DailyReportResponse:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content

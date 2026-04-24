@@ -5,18 +5,27 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  DailyReportRequest,
+  DailyReportResponse,
+  HealthStatus,
+  TreeHoleRequest,
+  TreeHoleResponse,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +108,176 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Send a message to the cat companion. Replies are gentle and ≤20 chinese chars.
+ * @summary Tree-hole companion chat
+ */
+export const getTreeHoleChatUrl = () => {
+  return `/api/ai/tree-hole`;
+};
+
+export const treeHoleChat = async (
+  treeHoleRequest: TreeHoleRequest,
+  options?: RequestInit,
+): Promise<TreeHoleResponse> => {
+  return customFetch<TreeHoleResponse>(getTreeHoleChatUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(treeHoleRequest),
+  });
+};
+
+export const getTreeHoleChatMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof treeHoleChat>>,
+    TError,
+    { data: BodyType<TreeHoleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof treeHoleChat>>,
+  TError,
+  { data: BodyType<TreeHoleRequest> },
+  TContext
+> => {
+  const mutationKey = ["treeHoleChat"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof treeHoleChat>>,
+    { data: BodyType<TreeHoleRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return treeHoleChat(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TreeHoleChatMutationResult = NonNullable<
+  Awaited<ReturnType<typeof treeHoleChat>>
+>;
+export type TreeHoleChatMutationBody = BodyType<TreeHoleRequest>;
+export type TreeHoleChatMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Tree-hole companion chat
+ */
+export const useTreeHoleChat = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof treeHoleChat>>,
+    TError,
+    { data: BodyType<TreeHoleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof treeHoleChat>>,
+  TError,
+  { data: BodyType<TreeHoleRequest> },
+  TContext
+> => {
+  return useMutation(getTreeHoleChatMutationOptions(options));
+};
+
+/**
+ * @summary Generate a personalized daily energy report
+ */
+export const getGenerateDailyReportUrl = () => {
+  return `/api/ai/daily-report`;
+};
+
+export const generateDailyReport = async (
+  dailyReportRequest: DailyReportRequest,
+  options?: RequestInit,
+): Promise<DailyReportResponse> => {
+  return customFetch<DailyReportResponse>(getGenerateDailyReportUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dailyReportRequest),
+  });
+};
+
+export const getGenerateDailyReportMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateDailyReport>>,
+    TError,
+    { data: BodyType<DailyReportRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateDailyReport>>,
+  TError,
+  { data: BodyType<DailyReportRequest> },
+  TContext
+> => {
+  const mutationKey = ["generateDailyReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateDailyReport>>,
+    { data: BodyType<DailyReportRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateDailyReport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateDailyReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateDailyReport>>
+>;
+export type GenerateDailyReportMutationBody = BodyType<DailyReportRequest>;
+export type GenerateDailyReportMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate a personalized daily energy report
+ */
+export const useGenerateDailyReport = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateDailyReport>>,
+    TError,
+    { data: BodyType<DailyReportRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateDailyReport>>,
+  TError,
+  { data: BodyType<DailyReportRequest> },
+  TContext
+> => {
+  return useMutation(getGenerateDailyReportMutationOptions(options));
+};

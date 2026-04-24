@@ -6,4 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./dailyReportRequest";
+export * from "./dailyReportResponse";
 export * from "./healthStatus";
+export * from "./treeHoleRequest";
+export * from "./treeHoleResponse";

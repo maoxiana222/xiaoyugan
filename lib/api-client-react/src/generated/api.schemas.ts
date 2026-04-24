@@ -8,3 +8,33 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface TreeHoleRequest {
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  message: string;
+}
+
+export interface TreeHoleResponse {
+  reply: string;
+  crisis: boolean;
+}
+
+export interface DailyReportRequest {
+  date: string;
+  recordCount: number;
+  averageEnergy: number;
+  minEnergy: number;
+  minTime?: string;
+  maxEnergy: number;
+  maxTime?: string;
+  events: string[];
+  blindBoxActions: string[];
+  cyclePhase: string;
+}
+
+export interface DailyReportResponse {
+  content: string;
+}
