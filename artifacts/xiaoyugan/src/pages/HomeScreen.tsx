@@ -17,26 +17,51 @@ import {
   setTriggersToday,
   type RecordEntry,
 } from "@/lib/storage";
-import { energyStatus } from "@/lib/baseline";
+import { energyStatus, calculatePhase, computeBaseline, roundToHalf, clamp } from "@/lib/baseline";
 import { CONSUME_REASONS, RESTORE_REASONS } from "@/lib/reasons";
 import { evaluateAchievements } from "@/lib/achievements";
 import { toast } from "sonner";
 
 export default function HomeScreen() {
   const [, setLocation] = useLocation();
-  const [baseline] = useBaseline();
+  const [baseline, setBaseline] = useBaseline();
   const [records, setRecords] = useRecords();
-  const [profile] = useProfile();
+  const [profile, setProfile] = useProfile();
   const [achievements, setAchievements] = useAchievements();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"consume" | "restore">("consume");
   const [softNudge, setSoftNudge] = useState<string | null>(null);
 
-  // Redirect to baseline if not yet completed
+  // Redirect to welcome if not yet completed
   useEffect(() => {
-    if (!baseline) setLocation("/baseline");
+    if (!baseline) setLocation("/welcome");
   }, [baseline, setLocation]);
+
+  // Daily phase recompute (per PRD 1.6) — runs once per day on mount
+  useEffect(() => {
+    if (!baseline) return;
+    const today = todayKey();
+    const hasTodayRecord = records.some((r) => r.date === today);
+    if (hasTodayRecord) return;
+    // recalculate phase + initial energy for the new day
+    const { phase, P_cycle } = calculatePhase(baseline);
+    const newInitial = computeBaseline(baseline.B, baseline.O_weight, P_cycle);
+    setBaseline({ ...baseline, P_cycle, baseline: newInitial });
+    if (phase !== profile.cyclePhase) setProfile({ ...profile, cyclePhase: phase });
+    setRecords([
+      ...records,
+      {
+        id: newId(),
+        date: today,
+        time: nowTime(),
+        delta: 0,
+        reason: "今日开启",
+        energyAfter: newInitial,
+      },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!baseline) return null;
 
@@ -46,7 +71,7 @@ export default function HomeScreen() {
   const status = energyStatus(currentEnergy);
 
   function applyDelta(delta: number, reason?: string) {
-    const newEnergy = Math.max(0, Math.min(10, currentEnergy + delta));
+    const newEnergy = clamp(roundToHalf(currentEnergy + delta), 0, 10);
     const entry: RecordEntry = {
       id: newId(),
       date: todayKey(),
@@ -128,10 +153,10 @@ export default function HomeScreen() {
       pressTimer.current = null;
     }
     if (!longPressed.current) {
-      // simple click
-      const delta = mode === "consume" ? -1 : 1;
+      // simple click — step is 0.5 per PRD
+      const delta = mode === "consume" ? -0.5 : 0.5;
       applyDelta(delta);
-      toast(mode === "consume" ? "−1 鱼干" : "+1 鱼干", {
+      toast(mode === "consume" ? "−0.5 鱼干" : "+0.5 鱼干", {
         duration: 1500,
         position: "top-center",
       });
@@ -148,10 +173,10 @@ export default function HomeScreen() {
   }
 
   function chooseReason(reason: string) {
-    const delta = drawerMode === "consume" ? -1 : 1;
+    const delta = drawerMode === "consume" ? -0.5 : 0.5;
     applyDelta(delta, reason);
     setDrawerOpen(false);
-    toast(`${drawerMode === "consume" ? "−1" : "+1"}　${reason}`, {
+    toast(`${drawerMode === "consume" ? "−0.5" : "+0.5"}　${reason}`, {
       duration: 1800,
       position: "top-center",
     });
@@ -225,7 +250,7 @@ export default function HomeScreen() {
         </div>
 
         <p className="text-center text-xs text-[#9B8F7F] mt-4">
-          轻点 ±1，长按记录原因
+          轻点 ±0.5，长按记录原因
         </p>
 
         {/* Blind box hint when low */}

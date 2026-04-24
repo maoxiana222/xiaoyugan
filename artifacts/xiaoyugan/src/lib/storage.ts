@@ -8,6 +8,13 @@ export interface Baseline {
   P_cycle: number;
   baseline: number;
   computedAt: string;
+  // v3.1 full fields
+  last_period_start: string | null; // YYYY-MM-DD
+  cycle_days: number; // T, default 28
+  period_days: number; // M, default 5
+  sleep_hours: number; // S_base, default 8.0
+  skip_cycle: boolean;
+  skip_baseline?: boolean;
 }
 
 export interface RecordEntry {

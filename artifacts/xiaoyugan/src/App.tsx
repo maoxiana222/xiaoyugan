@@ -3,7 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import HomeScreen from "@/pages/HomeScreen";
+import Welcome from "@/pages/Welcome";
 import Baseline from "@/pages/Baseline";
+import BaselineResult from "@/pages/BaselineResult";
 import TreeHole from "@/pages/TreeHole";
 import Report from "@/pages/Report";
 import Profile from "@/pages/Profile";
@@ -21,7 +23,9 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={HomeScreen} />
+      <Route path="/welcome" component={Welcome} />
       <Route path="/baseline" component={Baseline} />
+      <Route path="/baseline-result" component={BaselineResult} />
       <Route path="/tree-hole" component={TreeHole} />
       <Route path="/report" component={Report} />
       <Route path="/profile" component={Profile} />

@@ -7,13 +7,17 @@ A Chinese-language H5 mobile companion app for energy/mood tracking. Featuring a
 This is a pnpm monorepo with three artifacts:
 
 - **`artifacts/xiaoyugan/`** (kind: `web`) — The H5 React + Vite frontend mounted at `/`. localStorage-first; no auth. Routes:
-  - `/` — Home (fish-stick ring around cat, ± buttons with long-press for reasons)
-  - `/baseline` — 4-step baseline test (formula `S = round(((B×0.6)+(O×0.4×10))×P, 0.5)`)
+  - `/` — Home (fish-stick ring around cat, ± buttons step **0.5**, long-press for reasons)
+  - `/welcome` — First-launch welcome (PRD 1.2): cat + speech bubble + 开始体检 / 跳过
+  - `/baseline` — Full 4-page questionnaire (PRD 1.3): 体质 B → 周期数据 → 浓度 O → 理想睡眠
+  - `/baseline-result` — Result page (PRD 1.5): big number + phase/load summary + 开启小鱼干 button
   - `/tree-hole` — AI cat chat (≤22 char replies, crisis-keyword detection → 400-161-9995)
   - `/report` — Daily AI report + 14-day strip + per-day timeline
-  - `/profile` — Nickname, cycle phase, reset, clear data
+  - `/profile` — Nickname, manual cycle phase override, reset, clear data
   - `/achievements` — Achievement wall (8 milestones)
   - `/blindbox` — 20 preset recovery actions with countdown
+
+**Style**: Minimalist line-art picture-book. Cat is two-triangle ears + soft squircle head, dot eyes / arc smiles. Fish stick is a leaf-like outline + tail + dot eye. No fills, no shading.
 - **`artifacts/api-server/`** (kind: `api`) — Express server at `/api` with two endpoints:
   - `POST /api/ai/tree-hole` → tree-hole chat (uses Claude Haiku)
   - `POST /api/ai/daily-report` → daily report (uses Claude Sonnet)

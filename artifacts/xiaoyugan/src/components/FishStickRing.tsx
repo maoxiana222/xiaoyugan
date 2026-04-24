@@ -11,7 +11,6 @@ export function FishStickRing({ value, size = 280 }: Props) {
   const cx = size / 2;
   const cy = size / 2;
 
-  // Cat mood by energy
   const mood: "happy" | "calm" | "sleepy" | "concerned" =
     value >= 8 ? "happy" : value >= 5 ? "calm" : value >= 2 ? "sleepy" : "concerned";
 
@@ -29,8 +28,8 @@ export function FishStickRing({ value, size = 280 }: Props) {
           cy={cy}
           r={radius + 14}
           stroke="#E8DDD2"
-          strokeWidth="1.5"
-          strokeDasharray="2 4"
+          strokeWidth="1"
+          strokeDasharray="2 5"
           fill="none"
           opacity="0.7"
         />
@@ -38,15 +37,14 @@ export function FishStickRing({ value, size = 280 }: Props) {
           const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
           const x = cx + radius * Math.cos(angle);
           const y = cy + radius * Math.sin(angle);
-          // The leftmost (index 5 visually at bottom) is "0" filling clockwise from top
-          const filled = i < Math.ceil(value);
+          const filled = i < Math.floor(value);
           const half = i === Math.floor(value) && value % 1 !== 0;
           return (
             <g
               key={i}
               transform={`translate(${x} ${y}) rotate(${(angle * 180) / Math.PI + 90})`}
             >
-              <FishStick filled={filled && !half} half={half} />
+              <FishStickIcon state={filled ? "full" : half ? "half" : "empty"} />
             </g>
           );
         })}
@@ -58,24 +56,34 @@ export function FishStickRing({ value, size = 280 }: Props) {
   );
 }
 
-function FishStick({ filled, half }: { filled: boolean; half: boolean }) {
-  // A simple hand-drawn fish stick: rounded rectangle with two crosshatch lines
-  const fill = half ? "#FFE4CC" : filled ? "#FFD4A8" : "#F0E8DD";
-  const stroke = filled || half ? "#A88B5C" : "#C9BFB0";
+function FishStickIcon({ state }: { state: "full" | "half" | "empty" }) {
+  const stroke = "#3D3530";
+  const dim = "#C9BFB0";
+  const color = state === "empty" ? dim : stroke;
+  const sw = 1.5;
   return (
-    <g>
-      <rect
-        x="-9"
-        y="-4"
-        width="18"
-        height="8"
-        rx="3.5"
-        fill={fill}
-        stroke={stroke}
-        strokeWidth="1.4"
+    <g transform="translate(-13 -5)">
+      {/* body */}
+      <path
+        d="M 3 5 Q 3 0 11 0 Q 19 0 21 5 Q 19 10 11 10 Q 3 10 3 5 Z"
+        stroke={color}
+        strokeWidth={sw}
+        strokeLinejoin="round"
+        fill="none"
       />
-      <line x1="-3" y1="-4" x2="-3" y2="4" stroke={stroke} strokeWidth="0.9" opacity="0.6" />
-      <line x1="3" y1="-4" x2="3" y2="4" stroke={stroke} strokeWidth="0.9" opacity="0.6" />
+      {/* tail */}
+      <path
+        d="M 21 5 L 25 1.5 L 25 8.5 Z"
+        stroke={color}
+        strokeWidth={sw}
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {/* eye */}
+      <circle cx="7" cy="4.5" r="0.8" fill={color} />
+      {state === "half" && (
+        <circle cx="14" cy="5" r="1.2" fill={color} opacity="0.5" />
+      )}
     </g>
   );
 }

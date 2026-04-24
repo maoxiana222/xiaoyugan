@@ -192,7 +192,7 @@ export default function Profile() {
               onClick={() => {
                 clearAllData();
                 toast("数据已清空", { duration: 1500 });
-                setTimeout(() => setLocation("/baseline"), 500);
+                setTimeout(() => setLocation("/welcome"), 500);
               }}
               className="bg-[#E89A8F] text-white hover:bg-[#D88A7F]"
             >
