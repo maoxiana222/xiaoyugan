@@ -24,6 +24,10 @@ export interface RecordEntry {
   delta: number;
   reason?: string;
   energyAfter: number;
+  /** v4.3 二级入口大类（加法/减法） */
+  category?: string;
+  /** v4.3 二级入口具体描述 */
+  detail?: string;
 }
 
 export interface Profile {

@@ -8,10 +8,11 @@ This is a pnpm monorepo with three artifacts:
 
 - **`artifacts/xiaoyugan/`** (kind: `web`) — The H5 React + Vite frontend mounted at `/`. localStorage-first; no auth. Routes:
   - `/` — Home (fish-stick ring around cat, ± buttons step **0.5**, long-press for reasons)
+  - `/add-detail`, `/subtract-detail` — v4.3 二级入口 (long-press + or − on home): pick a category (RESTORE_CATEGORIES / CONSUME_CATEGORIES) + optional free-text detail, then commit a ±0.5 record. On return, the home page plays a fish-stick fly-in / fade-out animation.
   - `/welcome` — First-launch welcome (PRD 1.2): cat + speech bubble + 开始体检 / 跳过
   - `/baseline` — Full 4-page questionnaire (PRD 1.3): 体质 B → 周期数据 → 浓度 O → 理想睡眠
   - `/baseline-result` — Result page (PRD 1.5): big number + phase/load summary + 开启小鱼干 button
-  - `/tree-hole` — AI cat chat (≤22 char replies, crisis-keyword detection → 400-161-9995)
+  - `/tree-hole` — AI cat chat (v4.3 问题优先版: ≤80-char single-line replies, problem-first answers, energy data sent as context, crisis-keyword detection → 400-161-9995). Input bar sits flush with the bottom tab bar (`pb-[60px]`).
   - `/report` — Daily AI report + 14-day strip + per-day timeline
   - `/profile` — Nickname, manual cycle phase override, reset, clear data
   - `/achievements` — Achievement wall (8 milestones)

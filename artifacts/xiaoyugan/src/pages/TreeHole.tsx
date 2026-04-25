@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Send, Phone } from "lucide-react";
 import { useTreeHoleChat } from "@workspace/api-client-react";
@@ -9,6 +9,9 @@ import {
   useAchievements,
   useRecords,
   useBlindBox,
+  useBaseline,
+  useProfile,
+  todayKey,
   newId,
   type TreeHoleMessage,
 } from "@/lib/storage";
@@ -20,9 +23,64 @@ export default function TreeHole() {
   const [achievements, setAchievements] = useAchievements();
   const [records] = useRecords();
   const [blindbox] = useBlindBox();
+  const [baseline] = useBaseline();
+  const [profile] = useProfile();
   const chat = useTreeHoleChat();
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Compute energy summary to send as context to the AI (v4.3)
+  const energyContext = useMemo(() => {
+    const today = todayKey();
+    const todayRs = records.filter((r) => r.date === today);
+    const lastToday = todayRs[todayRs.length - 1];
+    const currentEnergy = lastToday
+      ? lastToday.energyAfter
+      : baseline?.baseline ?? undefined;
+    const initialEnergy = baseline?.baseline ?? undefined;
+
+    // 7-day average of end-of-day energy
+    const dayMap = new Map<string, number>();
+    for (const r of records) {
+      dayMap.set(r.date, r.energyAfter);
+    }
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const recent: number[] = [];
+    for (const [d, v] of dayMap) {
+      const dt = new Date(`${d}T00:00:00`);
+      if (dt >= cutoff) recent.push(v);
+    }
+    const avg7d =
+      recent.length > 0
+        ? Math.round(
+            (recent.reduce((s, v) => s + v, 0) / recent.length) * 10,
+          ) / 10
+        : undefined;
+
+    // Top consume categories from last 7 days
+    const killerCounts = new Map<string, number>();
+    for (const r of records) {
+      if (r.delta >= 0) continue;
+      const dt = new Date(`${r.date}T00:00:00`);
+      if (dt < cutoff) continue;
+      const key = r.category || r.reason;
+      if (!key) continue;
+      killerCounts.set(key, (killerCounts.get(key) ?? 0) + 1);
+    }
+    const topKillers = [...killerCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([k]) => k);
+
+    return {
+      currentEnergy,
+      initialEnergy,
+      cyclePhase: profile.cyclePhase,
+      avg7d,
+      topKillers,
+    };
+  }, [records, baseline, profile.cyclePhase]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -52,7 +110,7 @@ export default function TreeHole() {
     }
 
     chat.mutate(
-      { data: { message: text } },
+      { data: { message: text, ...energyContext } },
       {
         onSuccess: (res) => {
           const catMsg: TreeHoleMessage = {
@@ -79,7 +137,7 @@ export default function TreeHole() {
 
   return (
     <PageContainer>
-      <div className="flex flex-col h-screen pb-20">
+      <div className="flex flex-col h-screen pb-[60px]">
         <header className="flex items-center gap-3 px-5 pt-6 pb-3 border-b border-[#E8DDD2]">
           <CatAvatar size={44} mood="calm" />
           <div>

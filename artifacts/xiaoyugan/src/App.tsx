@@ -11,6 +11,8 @@ import Report from "@/pages/Report";
 import Profile from "@/pages/Profile";
 import Achievements from "@/pages/Achievements";
 import BlindBox from "@/pages/BlindBox";
+import AddDetail from "@/pages/AddDetail";
+import SubtractDetail from "@/pages/SubtractDetail";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -31,6 +33,8 @@ function Router() {
       <Route path="/profile" component={Profile} />
       <Route path="/achievements" component={Achievements} />
       <Route path="/blindbox" component={BlindBox} />
+      <Route path="/add-detail" component={AddDetail} />
+      <Route path="/subtract-detail" component={SubtractDetail} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -23,6 +23,22 @@ export const treeHoleChatBodyMessageMax = 500;
 
 export const TreeHoleChatBody = zod.object({
   message: zod.string().min(1).max(treeHoleChatBodyMessageMax),
+  currentEnergy: zod.number().optional().describe("Current energy 0-10"),
+  initialEnergy: zod
+    .number()
+    .optional()
+    .describe("Today's initial baseline energy 0-10"),
+  cyclePhase: zod
+    .string()
+    .optional()
+    .describe(
+      "Current cycle phase (e.g. 月经期\/卵泡期\/排卵期\/黄体期\/未追踪)",
+    ),
+  avg7d: zod.number().optional().describe("7-day average end-of-day energy"),
+  topKillers: zod
+    .array(zod.string())
+    .optional()
+    .describe("Top 1-2 high-consumption categories from the last 7 days"),
 });
 
 export const TreeHoleChatResponse = zod.object({

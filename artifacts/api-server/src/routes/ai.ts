@@ -32,23 +32,28 @@ const TREE_HOLE_FALLBACK_REPLIES = [
   "我都懂的，别勉强",
 ];
 
-const TREE_HOLE_SYSTEM_PROMPT = `你是一只温柔、包容的小猫，用户正在向你倾诉情绪。
+// v4.3 问题优先版
+const TREE_HOLE_SYSTEM_PROMPT = `你是一只温柔的小猫陪伴者。你会收到用户的话（可能是倾诉或提问）以及他近期的精力数据摘要。
 
-【严格规则，不得违反】：
-1. 每次回应必须控制在 20 个汉字以内（含标点）。
-2. 只表达共情和理解，不提供任何建议、解决方案或行动指引。
-3. 不追问用户的具体情况或细节。
-4. 不重复用户说的具体内容（避免"所以你是因为XXX才这样？"类句式）。
-5. 语气温暖、像朋友，可用"抱抱""摸摸头""嗯嗯"等词汇。
-6. 禁止输出任何格式标签、markdown、emoji 之外的特殊符号。
-7. 直接输出回应内容，不要加任何前缀如"小猫："等。
+【回应优先级】
+1. 如果用户在问一个具体问题（比如"勺子理论是什么"、"精力为什么这么低"），
+   请先用最简练的话直接回答这个问题，然后自然衔接一句对当前状态的轻提醒。
+2. 如果用户只是倾诉情绪，不必回答问题，直接用共情开头，并视情况给一句精力守护建议。
+3. 所有回应必须是一句完整的话，严格控制在 80 字内，不截断。
 
-【参考回应示例】：
-- "听起来真的很累了呢"
-- "抱抱你，辛苦了"
-- "嗯嗯，我懂的"
-- "没关系的，慢慢来"
-- "今天也很不容易吧"`;
+【硬性输出格式】
+- 整段输出只能是一句话，不允许换行、空行、分段、列表、序号、标题。
+- 不能科普展开，不能给两条以上信息，不能用"首先""其次""另外"等连接词分开多点。
+- 如果发现自己快超过 80 字，立即用句号结束。
+
+【风格约束】
+- 回答问题要简短准确，像朋友随口解释，不科普长篇。
+- 精力提醒只能基于提供的真实数据，没有模式时只说："累了就该休息，这从来没错。"
+- 禁止说教、鼓励再坚持、任何形式的"你可以更好"。
+- 如遇自我伤害词汇，固定回复："抱抱你，你很勇敢。需要时可以拨打 400-161-9995。"
+
+【语气】
+温暖、轻快，可用"喵""摸鱼"。禁止 markdown、标签。`;
 
 router.post("/tree-hole", async (req, res) => {
   const parse = TreeHoleChatBody.safeParse(req.body);
@@ -57,35 +62,73 @@ router.post("/tree-hole", async (req, res) => {
     return;
   }
 
-  const { message } = parse.data;
+  const { message, currentEnergy, initialEnergy, cyclePhase, avg7d, topKillers } =
+    parse.data;
 
   // Crisis keyword check — return fixed safety response immediately
   if (CRISIS_KEYWORDS.some((k) => message.includes(k))) {
-    const safeReply =
-      "抱抱你，你很勇敢。如果需要帮助，可以拨打心理援助热线 400-161-9995。";
+    const safeReply = "抱抱你，你很勇敢。需要时可以拨打 400-161-9995。";
     res.json(TreeHoleChatResponse.parse({ reply: safeReply, crisis: true }));
     return;
   }
 
+  // Build user prompt with energy summary (only include real data)
+  const lines: string[] = [];
+  if (
+    typeof currentEnergy === "number" ||
+    typeof initialEnergy === "number" ||
+    cyclePhase
+  ) {
+    const parts: string[] = [];
+    if (typeof currentEnergy === "number") parts.push(`精力 ${currentEnergy}/10`);
+    if (typeof initialEnergy === "number") parts.push(`初始 ${initialEnergy}`);
+    if (cyclePhase) parts.push(`阶段 ${cyclePhase}`);
+    lines.push(`今日：${parts.join("，")}`);
+  }
+  if (typeof avg7d === "number") {
+    lines.push(`近7天：日均精力 ${avg7d.toFixed(1)}`);
+  }
+  if (topKillers && topKillers.length > 0) {
+    lines.push(`近期高消耗 Top${topKillers.length}：${topKillers.join("、")}`);
+  }
+  lines.push(`用户说：${message}`);
+  const userPrompt = lines.join("\n");
+
   try {
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 8192,
+      max_tokens: 512,
       system: TREE_HOLE_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: `用户说：${message}` }],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const block = response.content[0];
     let reply = block && block.type === "text" ? block.text.trim() : "";
 
-    // Hard-truncate to ~22 chars in case the model overshoots
+    // Force single-line, single-sentence output (no newlines, no markdown)
+    reply = reply
+      .replace(/[\r\n]+/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/[*_#`>]/g, "")
+      .trim();
+
+    // Soft cap at 80 chars — try to end on a sentence boundary
+    if (reply.length > 80) {
+      const slice = reply.slice(0, 80);
+      const lastPunct = Math.max(
+        slice.lastIndexOf("。"),
+        slice.lastIndexOf("？"),
+        slice.lastIndexOf("！"),
+        slice.lastIndexOf("，"),
+      );
+      reply = lastPunct > 30 ? slice.slice(0, lastPunct + 1) : slice + "…";
+    }
+
     if (reply.length === 0) {
       reply =
         TREE_HOLE_FALLBACK_REPLIES[
           Math.floor(Math.random() * TREE_HOLE_FALLBACK_REPLIES.length)
         ]!;
-    } else if (reply.length > 22) {
-      reply = reply.slice(0, 22);
     }
 
     res.json(TreeHoleChatResponse.parse({ reply, crisis: false }));

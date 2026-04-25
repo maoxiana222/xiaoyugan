@@ -12,4 +12,14 @@ export interface TreeHoleRequest {
    * @maxLength 500
    */
   message: string;
+  /** Current energy 0-10 */
+  currentEnergy?: number;
+  /** Today's initial baseline energy 0-10 */
+  initialEnergy?: number;
+  /** Current cycle phase (e.g. 月经期/卵泡期/排卵期/黄体期/未追踪) */
+  cyclePhase?: string;
+  /** 7-day average end-of-day energy */
+  avg7d?: number;
+  /** Top 1-2 high-consumption categories from the last 7 days */
+  topKillers?: string[];
 }

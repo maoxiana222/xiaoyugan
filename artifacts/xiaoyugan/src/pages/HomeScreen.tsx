@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Settings, Trophy, Gift } from "lucide-react";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { PageContainer } from "@/components/PageContainer";
 import { FishStickRing } from "@/components/FishStickRing";
+import { FishStick } from "@/components/FishStick";
 import {
   useBaseline,
   useRecords,
@@ -18,7 +18,6 @@ import {
   type RecordEntry,
 } from "@/lib/storage";
 import { energyStatus, calculatePhase, computeBaseline, roundToHalf, clamp } from "@/lib/baseline";
-import { CONSUME_REASONS, RESTORE_REASONS } from "@/lib/reasons";
 import { evaluateAchievements } from "@/lib/achievements";
 import { toast } from "sonner";
 
@@ -29,9 +28,8 @@ export default function HomeScreen() {
   const [profile, setProfile] = useProfile();
   const [achievements, setAchievements] = useAchievements();
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<"consume" | "restore">("consume");
   const [softNudge, setSoftNudge] = useState<string | null>(null);
+  const [flyAnim, setFlyAnim] = useState<"in" | "out" | null>(null);
 
   // Redirect to welcome if not yet completed
   useEffect(() => {
@@ -133,7 +131,25 @@ export default function HomeScreen() {
     return count;
   }
 
-  // Long-press detection
+  // On return from add/subtract detail page, play fly animation + show any pending nudge
+  useEffect(() => {
+    const anim = sessionStorage.getItem("xiaoyugan_anim");
+    if (anim === "in" || anim === "out") {
+      setFlyAnim(anim);
+      sessionStorage.removeItem("xiaoyugan_anim");
+      const t = setTimeout(() => setFlyAnim(null), 1200);
+      const nudge = sessionStorage.getItem("xiaoyugan_nudge");
+      if (nudge) {
+        setSoftNudge(nudge);
+        sessionStorage.removeItem("xiaoyugan_nudge");
+        setTimeout(() => setSoftNudge(null), 8000);
+      }
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, []);
+
+  // Long-press detection — long-press opens detail page; tap = silent ±0.5
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
 
@@ -141,9 +157,8 @@ export default function HomeScreen() {
     longPressed.current = false;
     pressTimer.current = setTimeout(() => {
       longPressed.current = true;
-      setDrawerMode(mode);
-      setDrawerOpen(true);
       if ("vibrate" in navigator) navigator.vibrate?.(30);
+      setLocation(mode === "consume" ? "/subtract-detail" : "/add-detail");
     }, 600);
   }
 
@@ -156,6 +171,8 @@ export default function HomeScreen() {
       // simple click — step is 0.5 per PRD
       const delta = mode === "consume" ? -0.5 : 0.5;
       applyDelta(delta);
+      setFlyAnim(mode === "consume" ? "out" : "in");
+      setTimeout(() => setFlyAnim(null), 1200);
       toast(mode === "consume" ? "−0.5 鱼干" : "+0.5 鱼干", {
         duration: 1500,
         position: "top-center",
@@ -170,16 +187,6 @@ export default function HomeScreen() {
       pressTimer.current = null;
     }
     longPressed.current = false;
-  }
-
-  function chooseReason(reason: string) {
-    const delta = drawerMode === "consume" ? -0.5 : 0.5;
-    applyDelta(delta, reason);
-    setDrawerOpen(false);
-    toast(`${drawerMode === "consume" ? "−0.5" : "+0.5"}　${reason}`, {
-      duration: 1800,
-      position: "top-center",
-    });
   }
 
   return (
@@ -250,7 +257,7 @@ export default function HomeScreen() {
         </div>
 
         <p className="text-center text-xs text-[#9B8F7F] mt-4">
-          轻点 ±0.5，长按记录原因
+          轻点 ±0.5，长按记录详细原因
         </p>
 
         {/* Blind box hint when low */}
@@ -312,62 +319,33 @@ export default function HomeScreen() {
         )}
       </AnimatePresence>
 
-      {/* Reason drawer */}
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DrawerContent className="bg-[#FCFCF9] border-[#E8DDD2]">
-          <DrawerHeader>
-            <DrawerTitle className="text-[#5C4A3F] text-center">
-              {drawerMode === "consume" ? "因为什么消耗了？" : "因为什么补回了？"}
-            </DrawerTitle>
-          </DrawerHeader>
-          <div className="px-6 pb-8">
-            <div className="flex flex-wrap gap-2 justify-center">
-              {(drawerMode === "consume" ? CONSUME_REASONS : RESTORE_REASONS).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => chooseReason(r)}
-                  className={`px-4 py-2.5 rounded-full text-sm border-2 active:scale-95 transition-transform ${
-                    drawerMode === "consume"
-                      ? "bg-[#FFE4CC] border-[#F0CFA8] text-[#A86A4F]"
-                      : "bg-[#FFD4D4] border-[#F0B5B5] text-[#A86A6A]"
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-            <CustomReasonInput onSubmit={chooseReason} />
-          </div>
-        </DrawerContent>
-      </Drawer>
+      {/* Fly-in / fade-out fish stick animation */}
+      <AnimatePresence>
+        {flyAnim === "in" && (
+          <motion.div
+            key="fly-in"
+            initial={{ x: -200, y: 200, opacity: 0, scale: 0.6, rotate: -20 }}
+            animate={{ x: 0, y: 0, opacity: 1, scale: 1, rotate: 0 }}
+            exit={{ opacity: 0, scale: 0.4 }}
+            transition={{ type: "spring", damping: 16, stiffness: 140 }}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none"
+          >
+            <FishStick size={56} state="full" />
+          </motion.div>
+        )}
+        {flyAnim === "out" && (
+          <motion.div
+            key="fly-out"
+            initial={{ opacity: 1, scale: 1 }}
+            animate={{ opacity: 0, scale: 1.4, y: -40 }}
+            transition={{ duration: 1 }}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none"
+          >
+            <FishStick size={56} state="empty" />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageContainer>
-  );
-}
-
-function CustomReasonInput({ onSubmit }: { onSubmit: (r: string) => void }) {
-  const [value, setValue] = useState("");
-  return (
-    <div className="mt-5 flex gap-2">
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="或者写点别的..."
-        className="flex-1 px-4 py-2.5 rounded-full bg-[#F5F5F0] border border-[#E8DDD2] text-sm text-[#5C4A3F] placeholder:text-[#B8AC9C] focus:outline-none focus:border-[#FFD4D4]"
-        maxLength={40}
-      />
-      <button
-        onClick={() => {
-          if (value.trim()) {
-            onSubmit(value.trim());
-            setValue("");
-          }
-        }}
-        disabled={!value.trim()}
-        className="px-5 py-2.5 rounded-full bg-[#FFD4D4] text-[#5C4A3F] text-sm font-medium disabled:opacity-40"
-      >
-        记下
-      </button>
-    </div>
   );
 }
 
