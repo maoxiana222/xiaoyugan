@@ -2,7 +2,7 @@
 nixPkgs = ["nodejs_20", "nodePackages.pnpm"]
 
 [phases.build]
-cmds = ["pnpm install --frozen-lockfile=false && pnpm --filter @workspace/api-server run build"]
+cmds = ["pnpm install --no-frozen-lockfile && pnpm --filter @workspace/api-server run build"]
 
 [start]
 cmd = "pnpm --filter @workspace/api-server run start"
