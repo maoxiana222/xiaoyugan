@@ -19,6 +19,8 @@ import { evaluateAchievements } from "@/lib/achievements";
 import { toast } from "sonner";
 
 export default function TreeHole() {
+  const TAB_BAR_HEIGHT = 56;
+  const KEYBOARD_GAP = 10;
   const [messages, setMessages] = useTreeHole();
   const [achievements, setAchievements] = useAchievements();
   const [records] = useRecords();
@@ -28,6 +30,10 @@ export default function TreeHole() {
   const chat = useTreeHoleChat();
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [viewportHeight, setViewportHeight] = useState<number>(() =>
+    typeof window !== "undefined" ? window.innerHeight : 0,
+  );
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // Compute energy summary to send as context to the AI (v4.3)
   const energyContext = useMemo(() => {
@@ -86,6 +92,26 @@ export default function TreeHole() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, chat.isPending]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const vv = window.visualViewport;
+    const updateViewport = () => {
+      const currentHeight = vv?.height ?? window.innerHeight;
+      setViewportHeight(currentHeight);
+      setKeyboardOpen(window.innerHeight - currentHeight > 120);
+    };
+
+    updateViewport();
+    vv?.addEventListener("resize", updateViewport);
+    window.addEventListener("resize", updateViewport);
+
+    return () => {
+      vv?.removeEventListener("resize", updateViewport);
+      window.removeEventListener("resize", updateViewport);
+    };
+  }, []);
+
   function send() {
     const text = draft.trim();
     if (!text) return;
@@ -136,9 +162,15 @@ export default function TreeHole() {
   }
 
   return (
-    <PageContainer>
-      <div className="flex flex-col h-screen pb-[60px]">
-        <header className="flex items-center gap-3 px-5 pt-6 pb-3 border-b border-[#E8DDD2]">
+    <PageContainer className="!pb-0">
+      <div
+        className="flex flex-col min-h-0"
+        style={{
+          height: `calc(${Math.max(0, viewportHeight)}px - ${keyboardOpen ? 0 : TAB_BAR_HEIGHT}px)`,
+          backgroundColor: "#F5F5F0",
+        }}
+      >
+        <header className="shrink-0 flex items-center gap-3 px-5 pt-6 pb-3 border-b border-[#E8DDD2]">
           <CatAvatar size={44} mood="calm" />
           <div>
             <h1 className="text-base font-medium text-[#5C4A3F]">小猫的树洞</h1>
@@ -146,7 +178,7 @@ export default function TreeHole() {
           </div>
         </header>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-6 space-y-4">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center text-center mt-12 px-8">
               <CatAvatar size={100} mood="calm" />
@@ -172,7 +204,12 @@ export default function TreeHole() {
           )}
         </div>
 
-        <div className="px-4 py-3 bg-[#FCFCF9] border-t border-[#E8DDD2]">
+        <div
+          className="shrink-0 px-4 py-3 bg-[#FCFCF9] border-t border-[#E8DDD2]"
+          style={{
+            marginBottom: keyboardOpen ? `${KEYBOARD_GAP}px` : "0px",
+          }}
+        >
           <div className="flex items-end gap-2">
             <textarea
               value={draft}
