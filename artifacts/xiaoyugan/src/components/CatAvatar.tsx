@@ -7,9 +7,9 @@ interface Props {
 export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
   // Quick tune knobs for line-art style
   const stroke = "#3D3530";
-  const sw = 2;
-  const detailSw = 1.5; // eyes/whiskers细节线宽
-  const noseSw = 1.3;
+  const sw = 2.15;
+  const detailSw = 1.7; // eyes/whiskers细节线宽
+  const noseSw = 1.2;
 
   return (
     <svg
@@ -38,25 +38,42 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
       />
       {/* line-art head contour */}
       <path
-        d="M 38 39 Q 30 52 33 72 Q 36 94 60 94 Q 84 94 87 72 Q 90 52 82 39"
+        d="M 39 40 Q 31 50 35 70 Q 39 92 60 92 Q 81 92 85 70 Q 89 50 81 40"
         stroke={stroke}
         strokeWidth={sw}
         strokeLinejoin="round"
         strokeLinecap="round"
         fill="none"
       />
+      {/* soft blush for a cuter look */}
+      <ellipse
+        cx="44"
+        cy="72"
+        rx="6.2"
+        ry="2.8"
+        fill="#FFD4D4"
+        opacity="0.45"
+      />
+      <ellipse
+        cx="76"
+        cy="72"
+        rx="6.2"
+        ry="2.8"
+        fill="#FFD4D4"
+        opacity="0.45"
+      />
       {/* eyes */}
       {mood === "happy" ? (
         <>
           <path
-            d="M 47 60 Q 50 56 53 60"
+            d="M 45 59 Q 50 54.5 55 59"
             stroke={stroke}
             strokeWidth={sw}
             strokeLinecap="round"
             fill="none"
           />
           <path
-            d="M 67 60 Q 70 56 73 60"
+            d="M 65 59 Q 70 54.5 75 59"
             stroke={stroke}
             strokeWidth={sw}
             strokeLinecap="round"
@@ -66,14 +83,14 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
       ) : mood === "sleepy" ? (
         <>
           <path
-            d="M 46 62 Q 50 64.5 54 62"
+            d="M 45 61.5 Q 50 64 55 61.5"
             stroke={stroke}
             strokeWidth={sw}
             strokeLinecap="round"
             fill="none"
           />
           <path
-            d="M 66 62 Q 70 64.5 74 62"
+            d="M 65 61.5 Q 70 64 75 61.5"
             stroke={stroke}
             strokeWidth={sw}
             strokeLinecap="round"
@@ -84,16 +101,16 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
         <>
           <circle
             cx="50"
-            cy="62"
-            r="2.1"
+            cy="60.5"
+            r="2.8"
             stroke={stroke}
             strokeWidth={detailSw}
             fill="none"
           />
           <circle
             cx="70"
-            cy="62"
-            r="2.1"
+            cy="60.5"
+            r="2.8"
             stroke={stroke}
             strokeWidth={detailSw}
             fill="none"
@@ -102,7 +119,7 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
       )}
       {/* nose */}
       <path
-        d="M 58 70 L 62 70 L 60 73 Z"
+        d="M 58.3 67.8 L 61.7 67.8 L 60 70.4 Z"
         fill="none"
         stroke={stroke}
         strokeWidth={noseSw}
@@ -111,7 +128,7 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
       {/* mouth */}
       {mood === "concerned" ? (
         <path
-          d="M 56 80 Q 60 77 64 80"
+          d="M 56.5 76.8 Q 60 74.8 63.5 76.8"
           stroke={stroke}
           strokeWidth={sw}
           strokeLinecap="round"
@@ -119,7 +136,7 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
         />
       ) : (
         <path
-          d="M 56 76 Q 60 80 64 76"
+          d="M 55.2 73.8 Q 60 78.8 64.8 73.8"
           stroke={stroke}
           strokeWidth={sw}
           strokeLinecap="round"
@@ -128,25 +145,25 @@ export function CatAvatar({ size = 120, mood = "calm", className }: Props) {
       )}
       {/* whiskers */}
       <path
-        d="M 44 74 L 34 72"
+        d="M 46 72.5 L 39 71.8"
         stroke={stroke}
         strokeWidth={detailSw}
         strokeLinecap="round"
       />
       <path
-        d="M 44 78 L 33 79"
+        d="M 46 76 L 39 76.8"
         stroke={stroke}
         strokeWidth={detailSw}
         strokeLinecap="round"
       />
       <path
-        d="M 76 74 L 86 72"
+        d="M 74 72.5 L 81 71.8"
         stroke={stroke}
         strokeWidth={detailSw}
         strokeLinecap="round"
       />
       <path
-        d="M 76 78 L 87 79"
+        d="M 74 76 L 81 76.8"
         stroke={stroke}
         strokeWidth={detailSw}
         strokeLinecap="round"
