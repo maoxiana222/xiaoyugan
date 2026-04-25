@@ -17,7 +17,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://localhost:3000",
+      "/api": "https://workspaceapi-server-production-a72b.up.railway.app",
     },
   },
 });
