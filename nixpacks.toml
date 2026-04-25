@@ -1,8 +1,14 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "nodePackages.pnpm"]
+nixPkgs = ["nodePackages.pnpm", "nodejs"]
+
+[phases.install]
+# 在最外层安装，确保能链接到 lib 下的共享包
+cmds = ["pnpm install --no-frozen-lockfile"]
 
 [phases.build]
-cmds = ["pnpm install --frozen-lockfile=false && pnpm --filter @workspace/api-server run build"]
+# 这里的名字必须和 artifacts/xiaoyugan 文件夹里的 package.json 中的 name 对应
+cmds = ["pnpm run build --filter xiaoyugan"]
 
 [start]
-cmd = "pnpm --filter @workspace/api-server run start"
+# 启动前端应用
+cmd = "pnpm run start --filter xiaoyugan"
