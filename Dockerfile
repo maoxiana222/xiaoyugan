@@ -1,4 +1,4 @@
-# 使用轻量级 Node 镜像
+# 基础镜像
 FROM node:20-slim
 
 # 安装 pnpm
@@ -7,20 +7,25 @@ RUN npm install -g pnpm@latest
 # 设置工作目录
 WORKDIR /app
 
-# 1. 仅复制必要配置文件
+# 1. 复制配置文件
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# 2. 复制所有项目代码
+# 2. 复制整个项目代码
 COPY . .
 
-# 3. 安装依赖 (使用 --no-frozen-lockfile 确保跳过版本锁死校验)
+# 3. 【关键步骤】删除干扰项：直接删掉会报错且不需要的 sandbox 项目
+# 这样 pnpm 编译时就不会再扫描它的配置文件
+RUN rm -rf artifacts/mockup-sandbox
+
+# 4. 安装所有依赖
 RUN pnpm install --no-frozen-lockfile
 
-# 4. 精准编译：只编译 xiaoyugan 及其依赖的 lib，三个点 ... 非常关键
+# 5. 编译前端应用
+# 加上 --filter 的同时，因为 sandbox 已被删除，编译环境会变得非常干净
 RUN pnpm run build --filter @workspace/xiaoyugan...
 
-# 5. 暴露端口
+# 6. 暴露端口
 EXPOSE 4173
 
-# 6. 启动命令：使用预览模式并监听所有地址
+# 7. 启动服务
 CMD ["pnpm", "--filter", "@workspace/xiaoyugan", "run", "serve", "--host", "0.0.0.0"]
